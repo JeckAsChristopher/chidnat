@@ -1,3 +1,0 @@
-imp "os"
-
-os.sleep(8000)

@@ -1,6 +1,0 @@
--- File operations by user input
-imp "os.chn"
-
-stdo("Test seconds..")
-os_sleep(8000)
-stdo("Done!")
