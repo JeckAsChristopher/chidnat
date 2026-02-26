@@ -1,0 +1,29 @@
+name: CHN Auto-Publish
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Compile .func files (if needed)
+        run: |
+          echo "CHN compiling .func files..."
+          # optional: ./chn compile *.func
+
+      - name: Commit CHN-CONF / Build (optional)
+        run: |
+          git add .
+          git commit -m "Auto-build CHN library" || echo "No changes to commit"
+          git push
+
+      - name: Tag Release (optional)
+        run: |
+          git tag g${GITHUB_RUN_NUMBER}
+          git push origin g${GITHUB_RUN_NUMBER}
