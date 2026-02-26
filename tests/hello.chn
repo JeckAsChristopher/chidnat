@@ -1,0 +1,21 @@
+-- Basic hello world
+stdo("Hello World!");
+
+-- Variables
+let msg = "Hello World!";
+stdo(msg);
+
+-- Arithmetic
+var x = 1;
+var y = 1 + 1;
+stdo(y, x);
+
+-- if / else if / else
+var n = 0;
+if (n < 0) {
+    stdo("Less than 0");
+} else if (n > 0) {
+    stdo("Greater than 0");
+} else {
+    stdo("Equal to 0");
+}

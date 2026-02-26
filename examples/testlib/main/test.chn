@@ -1,0 +1,112 @@
+-- test.chn — example CHN library
+-- Part of the "test" package (version 1.0.0)
+-- This is the launch file pointed to by CHN-CONF
+
+-- ─── Greeting utilities ──────────────────────────────────────────────────────
+
+-- Returns a greeting string for the given name
+export public func test_greet(name) {
+    return "Hello from test lib, " + name + "!"
+}
+
+-- Returns a reversed string (character by character)
+export public func test_reverse(s) {
+    var result = ""
+    var i = s.length() - 1
+    while (i >= 0) {
+        result = result + s[i]
+        i = i - 1
+    }
+    return result
+}
+
+-- Returns true if the string is a palindrome
+export public func test_is_palindrome(s) {
+    return s == test_reverse(s)
+}
+
+-- ─── Math utilities ──────────────────────────────────────────────────────────
+
+-- Returns the absolute value of a number
+export public func test_abs(n) {
+    if (n < 0) { return 0 - n }
+    return n
+}
+
+-- Returns the larger of two values
+export public func test_max(a, b) {
+    if (a > b) { return a }
+    return b
+}
+
+-- Returns the smaller of two values
+export public func test_min(a, b) {
+    if (a < b) { return a }
+    return b
+}
+
+-- Returns n clamped to [lo, hi]
+export public func test_clamp(n, lo, hi) {
+    if (n < lo) { return lo }
+    if (n > hi) { return hi }
+    return n
+}
+
+-- Returns the sum of all elements in an array
+export public func test_sum(arr) {
+    var total = 0
+    var i = 0
+    while (i < arr.length()) {
+        total = total + arr[i]
+        i = i + 1
+    }
+    return total
+}
+
+-- ─── Array utilities ─────────────────────────────────────────────────────────
+
+-- Returns a new array with all values multiplied by factor
+export public func test_scale(arr, factor) {
+    array out = []
+    var i = 0
+    while (i < arr.length()) {
+        out.add(arr[i] * factor)
+        i = i + 1
+    }
+    return out
+}
+
+-- Returns true if value exists in array
+export public func test_includes(arr, val) {
+    var i = 0
+    while (i < arr.length()) {
+        if (arr[i] == val) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+-- Returns a new array with duplicate values removed (preserves order)
+export public func test_unique(arr) {
+    array seen = []
+    array out = []
+    var i = 0
+    while (i < arr.length()) {
+        if (!test_includes(seen, arr[i])) {
+            seen.add(arr[i])
+            out.add(arr[i])
+        }
+        i = i + 1
+    }
+    return out
+}
+
+-- ─── Version info ─────────────────────────────────────────────────────────────
+
+export public func test_version() {
+    return "1.0.0"
+}
+
+export public func test_about() {
+    return "test lib v" + test_version() + " — an example CHN package"
+}

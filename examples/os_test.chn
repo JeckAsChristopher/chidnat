@@ -1,0 +1,122 @@
+-- os_test.chn — exercises the os.chn library
+-- Run: ./chn examples/os_test.chn
+
+imp os
+
+stdo("=== os_test.chn ===")
+stdo("")
+
+-- § Time ──────────────────────────────────────────────────────────────────────
+stdo("--- Time ---")
+var t0 = os_time()
+stdo("unix time:", t0)
+stdo("formatted:", os_format_time(t0))
+
+var date = os_date(t0)
+stdo("year:", date[0], "  month:", date[1], "  day:", date[2])
+
+var clk = os_clock()
+os_sleep(20)
+var elapsed = os_elapsed(clk)
+stdo("slept ~20ms, measured:", elapsed, "ms")
+
+stdo("format_duration(3661):", os_format_duration(3661))   -- "1h 1m 1s"
+
+-- § Process info ───────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Process ---")
+stdo("pid:", os_pid())
+stdo("platform:", os_platform())
+stdo("hostname:", os_hostname())
+stdo("PATH set:", os_getenv("PATH") != nil)
+stdo("MISSING_VAR default:", os_getenv_or("__CHN_MISSING__", "fallback"))
+
+-- § File I/O ───────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- File I/O ---")
+var tmp = "/tmp/chn_os_test.txt"
+os_file_write(tmp, "line1\nline2\nline3\n")
+stdo("exists:", os_file_exists(tmp))
+stdo("size:", os_file_size(tmp), "bytes")
+
+var content = os_file_read(tmp)
+stdo("read back:", content)
+
+os_file_append(tmp, "line4\n")
+var lines = os_file_lines(tmp)
+stdo("line count:", lines.length())
+stdo("line[0]:", lines[0])
+stdo("line[3]:", lines[3])
+
+os_file_delete(tmp)
+stdo("deleted, exists now:", os_file_exists(tmp))
+
+-- § Directories ────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Directories ---")
+var dir = "/tmp/chn_os_test_dir"
+os_dir_make(dir)
+os_file_write(dir + "/a.txt", "a")
+os_file_write(dir + "/b.txt", "b")
+var files = os_dir_files(dir)
+stdo("dir file count:", files.length())
+
+-- § JSON helpers ───────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- JSON ---")
+var keys = ["name", "age", "active"]
+array vals = []
+vals.add("Alice")
+vals.add(30)
+vals.add(true)
+var json_str = os_json_obj(keys, vals)
+stdo("json:", json_str)
+
+var jpath = "/tmp/chn_test.json"
+os_json_write(jpath, keys, vals)
+stdo("wrote json file:", os_file_exists(jpath))
+os_file_delete(jpath)
+
+-- § CSV ────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- CSV ---")
+array rows = []
+array r1 = []
+r1.add("name")
+r1.add("score")
+rows.add(r1)
+array r2 = []
+r2.add("Alice")
+r2.add("99")
+rows.add(r2)
+var cpath = "/tmp/chn_test.csv"
+os_csv_write(cpath, rows)
+var read_rows = os_csv_read(cpath)
+stdo("csv rows:", read_rows.length())
+stdo("header:", read_rows[0])
+stdo("data:", read_rows[1])
+os_file_delete(cpath)
+
+-- § Logging ────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Logging ---")
+var logfile = "/tmp/chn_test.log"
+os_log_set_file(logfile)
+os_log_info("test info message")
+os_log_warn("test warn message")
+os_log_error("test error message")
+os_log_debug("test debug message")
+os_log("CUSTOM", "custom tag message")
+stdo("log exists:", os_file_exists(logfile))
+var log_lines = os_file_lines(logfile)
+stdo("log lines:", log_lines.length())
+os_file_delete(logfile)
+
+-- § Shell capture ──────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Shell ---")
+var uname = os_capture("uname -s")
+stdo("uname:", uname)
+
+stdo("")
+stdo("=== os_test PASSED ===")

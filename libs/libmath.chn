@@ -1,0 +1,1571 @@
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  libmath.chn  —  Comprehensive Math Library (NumPy-style)           ║
+-- ║                                                                      ║
+-- ║  Sections:                                                           ║
+-- ║    1.  Constants        (PI, E, TAU, PHI, INF, …)                   ║
+-- ║    2.  Basic            (abs, sign, floor, ceil, round, clamp, …)   ║
+-- ║    3.  Power / Root     (pow, sqrt, cbrt, hypot, log, log2, log10)  ║
+-- ║    4.  Exponential      (exp, expm1, log1p)                          ║
+-- ║    5.  Trigonometry     (sin, cos, tan, asin, acos, atan, atan2)    ║
+-- ║    6.  Hyperbolic       (sinh, cosh, tanh, asinh, acosh, atanh)     ║
+-- ║    7.  Rounding / Div   (trunc, fmod, div_floor, div_ceil)          ║
+-- ║    8.  Number Theory    (gcd, lcm, is_prime, next_prime, factors)   ║
+-- ║    9.  Combinatorics    (factorial, comb, perm, fib, lucas)         ║
+-- ║   10.  Statistics       (sum, mean, var, std, median, mode,         ║
+-- ║                          percentile, covariance, correlation)        ║
+-- ║   11.  Array Math       (dot, norm, normalize, cumsum, diff,        ║
+-- ║                          linspace, arange, zeros, ones, clip)        ║
+-- ║   12.  Matrix (2-D)     (mat_new, mat_add, mat_mul, mat_T,          ║
+-- ║                          mat_identity, mat_diag, mat_trace)          ║
+-- ║   13.  Interpolation    (lerp, lerp_arr, smoothstep, remap)         ║
+-- ║   14.  Geometry         (deg2rad, rad2deg, dist_2d, dist_3d,        ║
+-- ║                          point_on_circle, cross2d, cross3d)          ║
+-- ║   15.  Random (LCG)     (math_seed, rand, randf, rand_range,        ║
+-- ║                          rand_gauss, shuffle, sample)                ║
+-- ║                                                                      ║
+-- ║  Usage:  imp "libmath"                                               ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §1  CONSTANTS
+-- ═══════════════════════════════════════════════════════════════════════
+
+export public func math_PI()   { return 3.14159265358979323846; }
+export public func math_TAU()  { return 6.28318530717958647692; }
+export public func math_E()    { return 2.71828182845904523536; }
+export public func math_PHI()  { return 1.61803398874989484820; }  -- golden ratio
+export public func math_SQRT2(){ return 1.41421356237309504880; }
+export public func math_LN2()  { return 0.69314718055994530941; }
+export public func math_LN10() { return 2.30258509299404568401; }
+export public func math_INF()  { return 1e308 * 1e308; }           -- huge number (not true inf)
+export public func math_EPS()  { return 1e-9; }                     -- machine epsilon for comparisons
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §2  BASIC
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Absolute value
+export public func math_abs(x) {
+    if (x < 0) { return -x; }
+    return x;
+}
+
+-- Sign: -1, 0, or 1
+export public func math_sign(x) {
+    if (x > 0) { return 1; }
+    if (x < 0) { return -1; }
+    return 0;
+}
+
+-- Floor: largest integer ≤ x
+export public func math_floor(x) {
+    var t = x - (x % 1);
+    if (x < 0 && x % 1 != 0) { t = t - 1; }
+    return t;
+}
+
+-- Ceil: smallest integer ≥ x
+export public func math_ceil(x) {
+    var t = x - (x % 1);
+    if (x > 0 && x % 1 != 0) { t = t + 1; }
+    return t;
+}
+
+-- Truncate toward zero
+export public func math_trunc(x) {
+    return x - (x % 1);
+}
+
+-- Round to nearest integer (half-away-from-zero)
+export public func math_round(x) {
+    if (x >= 0) { return math_floor(x + 0.5); }
+    return math_ceil(x - 0.5);
+}
+
+-- Round to n decimal places
+export public func math_round_n(x, n) {
+    var scale = math_pow(10.0, n);
+    return math_round(x * scale) / scale;
+}
+
+-- Clamp x into [lo, hi]
+export public func math_clamp(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+-- Min of two values
+export public func math_min(a, b) {
+    if (a < b) { return a; }
+    return b;
+}
+
+-- Max of two values
+export public func math_max(a, b) {
+    if (a > b) { return a; }
+    return b;
+}
+
+-- True if two floats are equal within epsilon
+export public func math_approx(a, b) {
+    var d = a - b;
+    if (d < 0) { d = -d; }
+    return d < 1e-9;
+}
+
+-- True if approximately zero
+export public func math_is_zero(x) {
+    if (x < 0) { x = -x; }
+    return x < 1e-12;
+}
+
+-- Floating-point modulo (always same sign as divisor)
+export public func math_fmod(x, y) {
+    return x - math_trunc(x / y) * y;
+}
+
+-- Floor-division (integer quotient rounded toward -inf)
+export public func math_div_floor(a, b) {
+    return math_floor(a / b);
+}
+
+-- Ceiling-division (integer quotient rounded toward +inf)
+export public func math_div_ceil(a, b) {
+    return math_ceil(a / b);
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §3  POWER / ROOT
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Integer fast-power: a^b (b must be a non-negative integer)
+private func ipow(base, exp) {
+    if (exp == 0) { return 1; }
+    var result = 1;
+    var b = base;
+    var e = exp;
+    while (e > 0) {
+        if (e % 2 == 1) { result = result * b; }
+        b = b * b;
+        e = math_floor(e / 2);
+    }
+    return result;
+}
+
+-- General power: x^y  (x > 0 for non-integer y)
+export public func math_pow(x, y) {
+    -- Handle special cases
+    if (y == 0) { return 1; }
+    if (x == 0) { return 0; }
+    if (x == 1) { return 1; }
+    -- Integer exponent: fast path
+    var yi = math_trunc(y);
+    if (yi == y && y >= 0) { return ipow(x, yi); }
+    if (yi == y && y < 0) { return 1.0 / ipow(x, -yi); }
+    -- Float exponent: x^y = exp(y * ln(x))
+    if (x < 0) { return 0; }   -- undefined for negative x, non-integer y
+    return math_exp(y * math_ln(x));
+}
+
+-- Square root (Newton-Raphson)
+export public func math_sqrt(x) {
+    if (x < 0) { return 0; }
+    if (x == 0) { return 0; }
+    var g = x / 2.0;
+    if (g < 1) { g = 1; }
+    var i = 0;
+    while (i < 50) {
+        var ng = (g + x / g) / 2.0;
+        var diff = ng - g;
+        if (diff < 0) { diff = -diff; }
+        if (diff < 1e-12) { return ng; }
+        g = ng;
+        i = i + 1;
+    }
+    return g;
+}
+
+-- Cube root (Newton-Raphson, handles negatives)
+export public func math_cbrt(x) {
+    if (x == 0) { return 0; }
+    var neg = 0;
+    var ax = x;
+    if (ax < 0) { ax = -ax; neg = 1; }
+    var g = ax / 3.0;
+    if (g < 1) { g = 1; }
+    var i = 0;
+    while (i < 60) {
+        var ng = (2.0 * g + ax / (g * g)) / 3.0;
+        var diff = ng - g;
+        if (diff < 0) { diff = -diff; }
+        if (diff < 1e-12) {
+            if (neg == 1) { return -ng; }
+            return ng;
+        }
+        g = ng;
+        i = i + 1;
+    }
+    if (neg == 1) { return -g; }
+    return g;
+}
+
+-- Hypotenuse: sqrt(a²+b²) without overflow risk
+export public func math_hypot(a, b) {
+    return math_sqrt(a*a + b*b);
+}
+
+-- Hypotenuse in 3D: sqrt(a²+b²+c²)
+export public func math_hypot3(a, b, c) {
+    return math_sqrt(a*a + b*b + c*c);
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §4  EXPONENTIAL / LOGARITHM
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- exp(x) = e^x  via Taylor series + range reduction
+export public func math_exp(x) {
+    -- Range reduction: e^x = e^k * e^r, k = floor(x/ln2), r = x - k*ln2
+    var ln2 = 0.69314718055994530941;
+    var k = math_floor(x / ln2);
+    var r = x - k * ln2;
+    -- Taylor: e^r = sum(r^n / n!)  for small r
+    var sum = 1.0;
+    var term = 1.0;
+    var i = 1;
+    while (i <= 25) {
+        term = term * r / i;
+        sum = sum + term;
+        if (term < 0) { term = -term; }
+        if (term < 1e-15) { i = 26; }
+        i = i + 1;
+    }
+    -- Multiply by 2^k
+    var pow2 = 1.0;
+    var ki = math_trunc(k);
+    if (ki >= 0) {
+        var j = 0;
+        while (j < ki) { pow2 = pow2 * 2.0; j = j + 1; }
+    } else {
+        var j = 0;
+        while (j < -ki) { pow2 = pow2 / 2.0; j = j + 1; }
+    }
+    return sum * pow2;
+}
+
+-- exp(x) - 1, accurate near zero
+export public func math_expm1(x) {
+    if (x > 0.001 || x < -0.001) { return math_exp(x) - 1.0; }
+    -- Taylor: x + x^2/2! + x^3/3! ...
+    var sum = 0.0;
+    var term = x;
+    var i = 1;
+    while (i <= 20) {
+        sum = sum + term;
+        i = i + 1;
+        term = term * x / i;
+        if (term < 0) { term = -term; }
+        if (term < 1e-15) { i = 21; }
+        term = term * x / i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+-- Natural log ln(x), x > 0
+-- Uses Halley's method (cubic convergence)
+export public func math_ln(x) {
+    if (x <= 0) { return 0; }
+    if (x == 1) { return 0; }
+    -- Reduce: x = m * 2^k  so that m ∈ [0.5, 1)
+    var m = x;
+    var k = 0;
+    while (m >= 2.0) { m = m / 2.0; k = k + 1; }
+    while (m < 1.0)  { m = m * 2.0; k = k - 1; }
+    -- ln(x) = k*ln2 + ln(m)
+    -- Halley on ln(m) via y = (m-1)/(m+1), ln(m) = 2*(y + y^3/3 + y^5/5 + ...)
+    var y = (m - 1.0) / (m + 1.0);
+    var y2 = y * y;
+    var sum = 0.0;
+    var term = y;
+    var n = 1;
+    while (n <= 60) {
+        sum = sum + term / n;
+        n = n + 2;
+        term = term * y2;
+        if (term < 1e-15) { n = 61; }
+    }
+    var ln2 = 0.69314718055994530941;
+    return 2.0 * sum + k * ln2;
+}
+
+-- log(x) base b
+export public func math_log(x, b) {
+    return math_ln(x) / math_ln(b);
+}
+
+-- log base 2
+export public func math_log2(x) {
+    var ln2 = 0.69314718055994530941;
+    return math_ln(x) / ln2;
+}
+
+-- log base 10
+export public func math_log10(x) {
+    var ln10 = 2.30258509299404568401;
+    return math_ln(x) / ln10;
+}
+
+-- log(1+x), accurate for |x| << 1
+export public func math_log1p(x) {
+    if (x > 0.01 || x < -0.01) { return math_ln(1.0 + x); }
+    var sum = 0.0;
+    var term = x;
+    var i = 1;
+    while (i <= 30) {
+        sum = sum + term / i;
+        i = i + 1;
+        term = -term * x;
+        if (term < 0) { term = -term; }
+        if (term < 1e-15) { i = 31; }
+        term = -term * x;
+    }
+    return sum;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §5  TRIGONOMETRY
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Reduce angle to [-PI, PI]
+private func reduce_angle(x) {
+    var tau = 6.28318530717958647692;
+    var pi  = 3.14159265358979323846;
+    x = x - math_floor(x / tau) * tau;
+    if (x > pi) { x = x - tau; }
+    return x;
+}
+
+-- sin(x) — Taylor series after range reduction
+export public func math_sin(x) {
+    x = reduce_angle(x);
+    var sum = 0.0;
+    var term = x;
+    var x2 = x * x;
+    var i = 1;
+    while (i <= 15) {
+        sum = sum + term;
+        term = -term * x2 / ((2*i) * (2*i + 1));
+        i = i + 1;
+    }
+    return sum;
+}
+
+-- cos(x) — Taylor series after range reduction
+export public func math_cos(x) {
+    x = reduce_angle(x);
+    var sum = 0.0;
+    var term = 1.0;
+    var x2 = x * x;
+    var i = 1;
+    while (i <= 15) {
+        sum = sum + term;
+        term = -term * x2 / ((2*i - 1) * (2*i));
+        i = i + 1;
+    }
+    return sum;
+}
+
+-- tan(x) = sin/cos
+export public func math_tan(x) {
+    var c = math_cos(x);
+    if (c == 0) { return 1e300; }
+    return math_sin(x) / c;
+}
+
+-- asin(x), |x| ≤ 1  via asin(x) = atan(x/sqrt(1-x²))
+export public func math_asin(x) {
+    if (x >=  1) { return 3.14159265358979323846 / 2.0; }
+    if (x <= -1) { return -3.14159265358979323846 / 2.0; }
+    return math_atan(x / math_sqrt(1.0 - x*x));
+}
+
+-- acos(x) = PI/2 - asin(x)
+export public func math_acos(x) {
+    return 3.14159265358979323846 / 2.0 - math_asin(x);
+}
+
+-- atan(x): Maclaurin with safe, non-recursive range reduction
+-- Reduces to |z| ≤ tan(PI/12) ≈ 0.268 before applying series
+export public func math_atan(x) {
+    var pi = 3.14159265358979323846;
+    var half_pi = pi / 2.0;
+
+    -- Handle negatives symmetrically
+    var neg = 0;
+    if (x < 0) { x = -x; neg = 1; }
+
+    -- Reduce |x| > 1: atan(x) = PI/2 - atan(1/x)
+    var inv = 0;
+    if (x > 1.0) { x = 1.0 / x; inv = 1; }
+
+    -- Reduce to [0, tan(PI/12)]: atan(x) = PI/6 + atan((x - tan30)/(1 + x*tan30))
+    -- tan(PI/6) = 1/sqrt(3) ≈ 0.57735
+    var adj = 0;
+    var tan30 = 0.57735026918962576450;
+    if (x > 0.26794919243112270647) {   -- tan(PI/12)
+        x = (x - tan30) / (1.0 + x * tan30);
+        adj = 1;
+    }
+
+    -- Now |x| is small: pure Maclaurin series  x - x^3/3 + x^5/5 - ...
+    var sum  = 0.0;
+    var term = x;
+    var x2   = x * x;
+    var i    = 0;
+    while (i <= 15) {
+        sum  = sum + term / (2*i + 1);
+        term = -term * x2;
+        i    = i + 1;
+    }
+
+    -- Undo reductions
+    if (adj == 1) { sum = pi / 6.0 + sum; }
+    if (inv == 1) { sum = half_pi - sum; }
+    if (neg == 1) { sum = -sum; }
+    return sum;
+}
+
+-- atan2(y, x): angle in (-PI, PI]
+export public func math_atan2(y, x) {
+    var pi = 3.14159265358979323846;
+    if (x > 0) { return math_atan(y / x); }
+    if (x < 0 && y >= 0) { return math_atan(y / x) + pi; }
+    if (x < 0 && y  < 0) { return math_atan(y / x) - pi; }
+    if (x == 0 && y > 0) { return  pi / 2.0; }
+    if (x == 0 && y < 0) { return -pi / 2.0; }
+    return 0;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §6  HYPERBOLIC
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- sinh(x) = (e^x - e^(-x)) / 2
+export public func math_sinh(x) {
+    return (math_exp(x) - math_exp(-x)) / 2.0;
+}
+
+-- cosh(x) = (e^x + e^(-x)) / 2
+export public func math_cosh(x) {
+    return (math_exp(x) + math_exp(-x)) / 2.0;
+}
+
+-- tanh(x) = sinh/cosh
+export public func math_tanh(x) {
+    if (x > 20)  { return  1.0; }
+    if (x < -20) { return -1.0; }
+    var e2 = math_exp(2.0 * x);
+    return (e2 - 1.0) / (e2 + 1.0);
+}
+
+-- asinh(x) = ln(x + sqrt(x²+1))
+export public func math_asinh(x) {
+    return math_ln(x + math_sqrt(x*x + 1.0));
+}
+
+-- acosh(x) = ln(x + sqrt(x²-1)),  x ≥ 1
+export public func math_acosh(x) {
+    if (x < 1) { return 0; }
+    return math_ln(x + math_sqrt(x*x - 1.0));
+}
+
+-- atanh(x) = ln((1+x)/(1-x))/2,  |x| < 1
+export public func math_atanh(x) {
+    if (x >=  1) { return  1e300; }
+    if (x <= -1) { return -1e300; }
+    return math_ln((1.0 + x) / (1.0 - x)) / 2.0;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §7  ROUNDING
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Banker's rounding (round half to even)
+export public func math_round_even(x) {
+    var fl = math_floor(x);
+    var frac = x - fl;
+    if (frac > 0.5) { return fl + 1; }
+    if (frac < 0.5) { return fl; }
+    -- Exactly 0.5: round to even
+    if (fl % 2 == 0) { return fl; }
+    return fl + 1;
+}
+
+-- Quantize x to the nearest multiple of step
+export public func math_quantize(x, step) {
+    return math_round(x / step) * step;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §8  NUMBER THEORY
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Greatest common divisor (Euclidean)
+export public func math_gcd(a, b) {
+    a = math_abs(a);
+    b = math_abs(b);
+    while (b != 0) {
+        var t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
+-- Least common multiple
+export public func math_lcm(a, b) {
+    if (a == 0 || b == 0) { return 0; }
+    return math_abs(a * b) / math_gcd(a, b);
+}
+
+-- Is x a prime number? (trial division)
+export public func math_is_prime(n) {
+    if (n < 2) { return false; }
+    if (n == 2) { return true; }
+    if (n % 2 == 0) { return false; }
+    var i = 3;
+    while (i * i <= n) {
+        if (n % i == 0) { return false; }
+        i = i + 2;
+    }
+    return true;
+}
+
+-- Next prime ≥ n
+export public func math_next_prime(n) {
+    if (n <= 2) { return 2; }
+    var candidate = n;
+    if (candidate % 2 == 0) { candidate = candidate + 1; }
+    while (math_is_prime(candidate) == false) {
+        candidate = candidate + 2;
+    }
+    return candidate;
+}
+
+-- Return array of all prime factors of n
+export public func math_factors(n) {
+    array result = [];
+    n = math_abs(n);
+    if (n < 2) { return result; }
+    var d = 2;
+    while (d * d <= n) {
+        while (n % d == 0) {
+            result.add(d);
+            n = n / d;
+        }
+        d = d + 1;
+    }
+    if (n > 1) { result.add(n); }
+    return result;
+}
+
+-- Return array of all divisors of n (sorted ascending)
+export public func math_divisors(n) {
+    array result = [];
+    n = math_abs(n);
+    if (n == 0) { return result; }
+    var i = 1;
+    while (i * i <= n) {
+        if (n % i == 0) {
+            result.add(i);
+            if (i != n / i) { result.add(n / i); }
+        }
+        i = i + 1;
+    }
+    -- simple insertion sort
+    var j = 1;
+    while (j < result.length()) {
+        var key = result[j];
+        var k = j - 1;
+        while (k >= 0 && result[k] > key) {
+            result[k+1] = result[k];
+            k = k - 1;
+        }
+        result[k+1] = key;
+        j = j + 1;
+    }
+    return result;
+}
+
+-- Euler's totient φ(n): count of integers in [1,n] coprime to n
+export public func math_totient(n) {
+    var result = n;
+    var p = 2;
+    var m = n;
+    while (p * p <= m) {
+        if (m % p == 0) {
+            while (m % p == 0) { m = m / p; }
+            result = result - result / p;
+        }
+        p = p + 1;
+    }
+    if (m > 1) { result = result - result / m; }
+    return result;
+}
+
+-- Modular exponentiation: (base^exp) mod m
+export public func math_powmod(base, exp, m) {
+    var result = 1;
+    base = base % m;
+    while (exp > 0) {
+        if (exp % 2 == 1) { result = (result * base) % m; }
+        exp = math_floor(exp / 2);
+        base = (base * base) % m;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §9  COMBINATORICS
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Factorial n! (exact up to ~20!, then float approximation)
+export public func math_factorial(n) {
+    if (n < 0)  { return 0; }
+    if (n == 0) { return 1; }
+    var result = 1;
+    var i = 1;
+    while (i <= n) { result = result * i; i = i + 1; }
+    return result;
+}
+
+-- Binomial coefficient C(n, k)
+export public func math_comb(n, k) {
+    if (k < 0 || k > n) { return 0; }
+    if (k == 0 || k == n) { return 1; }
+    if (k > n - k) { k = n - k; }   -- symmetry
+    var result = 1;
+    var i = 0;
+    while (i < k) {
+        result = result * (n - i) / (i + 1);
+        i = i + 1;
+    }
+    return math_round(result);
+}
+
+-- Permutations P(n, k) = n! / (n-k)!
+export public func math_perm(n, k) {
+    if (k < 0 || k > n) { return 0; }
+    var result = 1;
+    var i = 0;
+    while (i < k) { result = result * (n - i); i = i + 1; }
+    return result;
+}
+
+-- n-th Fibonacci number (iterative, 0-indexed: fib(0)=0, fib(1)=1)
+export public func math_fib(n) {
+    if (n <= 0) { return 0; }
+    if (n == 1) { return 1; }
+    var a = 0;
+    var b = 1;
+    var i = 2;
+    while (i <= n) {
+        var c = a + b;
+        a = b;
+        b = c;
+        i = i + 1;
+    }
+    return b;
+}
+
+-- n-th Lucas number (L(0)=2, L(1)=1, L(n)=L(n-1)+L(n-2))
+export public func math_lucas(n) {
+    if (n == 0) { return 2; }
+    if (n == 1) { return 1; }
+    var a = 2;
+    var b = 1;
+    var i = 2;
+    while (i <= n) {
+        var c = a + b;
+        a = b;
+        b = c;
+        i = i + 1;
+    }
+    return b;
+}
+
+-- Return array of first n Fibonacci numbers
+export public func math_fib_arr(n) {
+    array result = [];
+    var a = 0;
+    var b = 1;
+    var i = 0;
+    while (i < n) {
+        result.add(a);
+        var c = a + b;
+        a = b;
+        b = c;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Stirling's approximation for large n!
+export public func math_log_factorial(n) {
+    if (n <= 1) { return 0; }
+    -- Stirling: ln(n!) ≈ n*ln(n) - n + 0.5*ln(2*PI*n)
+    var pi = 3.14159265358979323846;
+    return n * math_ln(n) - n + 0.5 * math_ln(2.0 * pi * n);
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §10  STATISTICS
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Sum of all elements
+export public func stat_sum(arr) {
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) { s = s + arr[i]; i = i + 1; }
+    return s;
+}
+
+-- Arithmetic mean
+export public func stat_mean(arr) {
+    if (arr.length() == 0) { return 0; }
+    return stat_sum(arr) / arr.length();
+}
+
+-- Population variance (divide by n)
+export public func stat_var(arr) {
+    if (arr.length() == 0) { return 0; }
+    var m = stat_mean(arr);
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) {
+        var d = arr[i] - m;
+        s = s + d * d;
+        i = i + 1;
+    }
+    return s / arr.length();
+}
+
+-- Sample variance (divide by n-1)
+export public func stat_var_s(arr) {
+    if (arr.length() <= 1) { return 0; }
+    var m = stat_mean(arr);
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) {
+        var d = arr[i] - m;
+        s = s + d * d;
+        i = i + 1;
+    }
+    return s / (arr.length() - 1);
+}
+
+-- Population standard deviation
+export public func stat_std(arr) {
+    return math_sqrt(stat_var(arr));
+}
+
+-- Sample standard deviation
+export public func stat_std_s(arr) {
+    return math_sqrt(stat_var_s(arr));
+}
+
+-- Median (sorts a copy, does not mutate input)
+export public func stat_median(arr) {
+    if (arr.length() == 0) { return 0; }
+    -- copy + insertion sort
+    array s = [];
+    var i = 0;
+    while (i < arr.length()) { s.add(arr[i]); i = i + 1; }
+    var j = 1;
+    while (j < s.length()) {
+        var key = s[j];
+        var k = j - 1;
+        while (k >= 0 && s[k] > key) { s[k+1] = s[k]; k = k - 1; }
+        s[k+1] = key;
+        j = j + 1;
+    }
+    var n = s.length();
+    if (n % 2 == 1) { return s[n / 2]; }
+    return (s[n/2 - 1] + s[n/2]) / 2.0;
+}
+
+-- Mode (most frequent value — returns first if tie)
+export public func stat_mode(arr) {
+    if (arr.length() == 0) { return nil; }
+    var best_val = arr[0];
+    var best_cnt = 1;
+    var i = 0;
+    while (i < arr.length()) {
+        var cnt = 0;
+        var j = 0;
+        while (j < arr.length()) {
+            if (arr[j] == arr[i]) { cnt = cnt + 1; }
+            j = j + 1;
+        }
+        if (cnt > best_cnt) {
+            best_cnt = cnt;
+            best_val = arr[i];
+        }
+        i = i + 1;
+    }
+    return best_val;
+}
+
+-- Range (max - min)
+export public func stat_range(arr) {
+    if (arr.length() == 0) { return 0; }
+    var mn = arr[0];
+    var mx = arr[0];
+    var i = 1;
+    while (i < arr.length()) {
+        if (arr[i] < mn) { mn = arr[i]; }
+        if (arr[i] > mx) { mx = arr[i]; }
+        i = i + 1;
+    }
+    return mx - mn;
+}
+
+-- p-th percentile (0-100), linear interpolation
+export public func stat_percentile(arr, p) {
+    if (arr.length() == 0) { return 0; }
+    -- sorted copy
+    array s = [];
+    var i = 0;
+    while (i < arr.length()) { s.add(arr[i]); i = i + 1; }
+    var j = 1;
+    while (j < s.length()) {
+        var key = s[j];
+        var k = j - 1;
+        while (k >= 0 && s[k] > key) { s[k+1] = s[k]; k = k - 1; }
+        s[k+1] = key;
+        j = j + 1;
+    }
+    var n = s.length();
+    var idx = p / 100.0 * (n - 1);
+    var lo  = math_floor(idx);
+    var hi  = math_ceil(idx);
+    if (lo == hi) { return s[lo]; }
+    var frac = idx - lo;
+    return s[lo] * (1 - frac) + s[hi] * frac;
+}
+
+-- Covariance of two equal-length arrays (population)
+export public func stat_cov(x, y) {
+    if (x.length() != y.length() || x.length() == 0) { return 0; }
+    var mx = stat_mean(x);
+    var my = stat_mean(y);
+    var s  = 0;
+    var i  = 0;
+    while (i < x.length()) {
+        s = s + (x[i] - mx) * (y[i] - my);
+        i = i + 1;
+    }
+    return s / x.length();
+}
+
+-- Pearson correlation coefficient
+export public func stat_corr(x, y) {
+    var sx = stat_std(x);
+    var sy = stat_std(y);
+    if (sx == 0 || sy == 0) { return 0; }
+    return stat_cov(x, y) / (sx * sy);
+}
+
+-- Sum of squares
+export public func stat_ss(arr) {
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) { s = s + arr[i]*arr[i]; i = i + 1; }
+    return s;
+}
+
+-- Root Mean Square
+export public func stat_rms(arr) {
+    if (arr.length() == 0) { return 0; }
+    return math_sqrt(stat_ss(arr) / arr.length());
+}
+
+-- Min and Max of an array
+export public func stat_min(arr) {
+    if (arr.length() == 0) { return 0; }
+    var m = arr[0];
+    var i = 1;
+    while (i < arr.length()) { if (arr[i] < m) { m = arr[i]; } i = i + 1; }
+    return m;
+}
+
+export public func stat_max(arr) {
+    if (arr.length() == 0) { return 0; }
+    var m = arr[0];
+    var i = 1;
+    while (i < arr.length()) { if (arr[i] > m) { m = arr[i]; } i = i + 1; }
+    return m;
+}
+
+-- Z-score normalize: returns array of (x - mean) / std
+export public func stat_zscore(arr) {
+    var m = stat_mean(arr);
+    var s = stat_std(arr);
+    array result = [];
+    var i = 0;
+    if (s == 0) {
+        while (i < arr.length()) { result.add(0); i = i + 1; }
+        return result;
+    }
+    while (i < arr.length()) {
+        result.add((arr[i] - m) / s);
+        i = i + 1;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §11  ARRAY MATH  (element-wise, NumPy-style)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Create array of n zeros
+export public func arr_zeros(n) {
+    array result = [];
+    var i = 0;
+    while (i < n) { result.add(0); i = i + 1; }
+    return result;
+}
+
+-- Create array of n ones
+export public func arr_ones(n) {
+    array result = [];
+    var i = 0;
+    while (i < n) { result.add(1); i = i + 1; }
+    return result;
+}
+
+-- Linearly spaced array: n values from start to stop (inclusive)
+export public func arr_linspace(start, stop, n) {
+    array result = [];
+    if (n <= 0) { return result; }
+    if (n == 1) { result.add(start); return result; }
+    var step = (stop - start) / (n - 1);
+    var i = 0;
+    while (i < n) {
+        result.add(start + i * step);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Range array: start, start+step, ... (like Python's arange)
+export public func arr_arange(start, stop, step) {
+    array result = [];
+    if (step == 0) { return result; }
+    var x = start;
+    if (step > 0) {
+        while (x < stop) { result.add(x); x = x + step; }
+    } else {
+        while (x > stop) { result.add(x); x = x + step; }
+    }
+    return result;
+}
+
+-- Element-wise add two arrays
+export public func arr_add(a, b) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { result.add(a[i] + b[i]); i = i + 1; }
+    return result;
+}
+
+-- Element-wise subtract
+export public func arr_sub(a, b) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { result.add(a[i] - b[i]); i = i + 1; }
+    return result;
+}
+
+-- Element-wise multiply (Hadamard product)
+export public func arr_mul(a, b) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { result.add(a[i] * b[i]); i = i + 1; }
+    return result;
+}
+
+-- Element-wise divide
+export public func arr_div(a, b) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { result.add(a[i] / b[i]); i = i + 1; }
+    return result;
+}
+
+-- Scalar multiply
+export public func arr_scale(arr, s) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(arr[i] * s); i = i + 1; }
+    return result;
+}
+
+-- Scalar add
+export public func arr_offset(arr, s) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(arr[i] + s); i = i + 1; }
+    return result;
+}
+
+-- Dot product (inner product) of two vectors
+export public func arr_dot(a, b) {
+    var s = 0;
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { s = s + a[i] * b[i]; i = i + 1; }
+    return s;
+}
+
+-- Euclidean norm (magnitude) of a vector
+export public func arr_norm(arr) {
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) { s = s + arr[i]*arr[i]; i = i + 1; }
+    return math_sqrt(s);
+}
+
+-- Normalize vector to unit length
+export public func arr_normalize(arr) {
+    var n = arr_norm(arr);
+    if (n == 0) { return arr; }
+    return arr_scale(arr, 1.0 / n);
+}
+
+-- Cumulative sum
+export public func arr_cumsum(arr) {
+    array result = [];
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) {
+        s = s + arr[i];
+        result.add(s);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- First-order differences: result[i] = arr[i+1] - arr[i]
+export public func arr_diff(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length() - 1) {
+        result.add(arr[i+1] - arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Clip each element to [lo, hi]
+export public func arr_clip(arr, lo, hi) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) {
+        var v = arr[i];
+        if (v < lo) { v = lo; }
+        if (v > hi) { v = hi; }
+        result.add(v);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Apply abs to each element
+export public func arr_abs(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) {
+        var v = arr[i];
+        if (v < 0) { v = -v; }
+        result.add(v);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Apply sqrt to each element
+export public func arr_sqrt(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(math_sqrt(arr[i])); i = i + 1; }
+    return result;
+}
+
+-- Apply exp to each element
+export public func arr_exp(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(math_exp(arr[i])); i = i + 1; }
+    return result;
+}
+
+-- Apply ln to each element
+export public func arr_log(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(math_ln(arr[i])); i = i + 1; }
+    return result;
+}
+
+-- Apply sin/cos to each element
+export public func arr_sin(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(math_sin(arr[i])); i = i + 1; }
+    return result;
+}
+export public func arr_cos(arr) {
+    array result = [];
+    var i = 0;
+    while (i < arr.length()) { result.add(math_cos(arr[i])); i = i + 1; }
+    return result;
+}
+
+-- Argmin and argmax
+export public func arr_argmin(arr) {
+    if (arr.length() == 0) { return -1; }
+    var mi = 0;
+    var i = 1;
+    while (i < arr.length()) { if (arr[i] < arr[mi]) { mi = i; } i = i + 1; }
+    return mi;
+}
+export public func arr_argmax(arr) {
+    if (arr.length() == 0) { return -1; }
+    var mi = 0;
+    var i = 1;
+    while (i < arr.length()) { if (arr[i] > arr[mi]) { mi = i; } i = i + 1; }
+    return mi;
+}
+
+-- Reverse an array (non-mutating copy)
+export public func arr_flip(arr) {
+    array result = [];
+    var i = arr.length() - 1;
+    while (i >= 0) { result.add(arr[i]); i = i - 1; }
+    return result;
+}
+
+-- Append two arrays (concatenate)
+export public func arr_concat(a, b) {
+    array result = [];
+    var i = 0;
+    while (i < a.length()) { result.add(a[i]); i = i + 1; }
+    i = 0;
+    while (i < b.length()) { result.add(b[i]); i = i + 1; }
+    return result;
+}
+
+-- Outer product: result[i][j] = a[i]*b[j]  (returns array of arrays)
+export public func arr_outer(a, b) {
+    array result = [];
+    var i = 0;
+    while (i < a.length()) {
+        array row = [];
+        var j = 0;
+        while (j < b.length()) { row.add(a[i] * b[j]); j = j + 1; }
+        result.add(row);
+        i = i + 1;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §12  MATRIX OPERATIONS  (matrix = array of equal-length row arrays)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Create an r×c zero matrix
+export public func mat_zeros(r, c) {
+    array m = [];
+    var i = 0;
+    while (i < r) {
+        array row = arr_zeros(c);
+        m.add(row);
+        i = i + 1;
+    }
+    return m;
+}
+
+-- Create an n×n identity matrix
+export public func mat_identity(n) {
+    array m = mat_zeros(n, n);
+    var i = 0;
+    while (i < n) { m[i][i] = 1; i = i + 1; }
+    return m;
+}
+
+-- Create diagonal matrix from a vector
+export public func mat_diag(v) {
+    var n = v.length();
+    array m = mat_zeros(n, n);
+    var i = 0;
+    while (i < n) { m[i][i] = v[i]; i = i + 1; }
+    return m;
+}
+
+-- Matrix trace (sum of diagonal)
+export public func mat_trace(m) {
+    var n = m.length();
+    var s = 0;
+    var i = 0;
+    while (i < n && i < m[0].length()) { s = s + m[i][i]; i = i + 1; }
+    return s;
+}
+
+-- Transpose: result[j][i] = m[i][j]
+export public func mat_T(m) {
+    var rows = m.length();
+    if (rows == 0) { array e = []; return e; }
+    var cols = m[0].length();
+    array result = mat_zeros(cols, rows);
+    var i = 0;
+    while (i < rows) {
+        var j = 0;
+        while (j < cols) { result[j][i] = m[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Matrix addition
+export public func mat_add(a, b) {
+    var rows = a.length();
+    var cols = a[0].length();
+    array result = mat_zeros(rows, cols);
+    var i = 0;
+    while (i < rows) {
+        var j = 0;
+        while (j < cols) { result[i][j] = a[i][j] + b[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Matrix-scalar multiply
+export public func mat_scale(m, s) {
+    var rows = m.length();
+    var cols = m[0].length();
+    array result = mat_zeros(rows, cols);
+    var i = 0;
+    while (i < rows) {
+        var j = 0;
+        while (j < cols) { result[i][j] = m[i][j] * s; j = j + 1; }
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Matrix multiply: a (m×k) × b (k×n)  → result (m×n)
+export public func mat_mul(a, b) {
+    var rows_a = a.length();
+    var cols_a = a[0].length();
+    var cols_b = b[0].length();
+    array result = mat_zeros(rows_a, cols_b);
+    var i = 0;
+    while (i < rows_a) {
+        var j = 0;
+        while (j < cols_b) {
+            var s = 0;
+            var k = 0;
+            while (k < cols_a) { s = s + a[i][k] * b[k][j]; k = k + 1; }
+            result[i][j] = s;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Matrix-vector product: m (r×c) × v (c,) → result (r,)
+export public func mat_vec(m, v) {
+    var rows = m.length();
+    var cols = m[0].length();
+    array result = arr_zeros(rows);
+    var i = 0;
+    while (i < rows) {
+        var s = 0;
+        var j = 0;
+        while (j < cols) { s = s + m[i][j] * v[j]; j = j + 1; }
+        result[i] = s;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Frobenius norm of a matrix (sqrt of sum of squares)
+export public func mat_norm(m) {
+    var s = 0;
+    var i = 0;
+    while (i < m.length()) {
+        var j = 0;
+        while (j < m[i].length()) { s = s + m[i][j]*m[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    return math_sqrt(s);
+}
+
+-- 2×2 determinant
+export public func mat_det2(m) {
+    return m[0][0]*m[1][1] - m[0][1]*m[1][0];
+}
+
+-- 3×3 determinant (Sarrus)
+export public func mat_det3(m) {
+    var d = m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1]) - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0]) + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+    return d;
+}
+
+-- 2×2 inverse
+export public func mat_inv2(m) {
+    var d = mat_det2(m);
+    if (d == 0) { return mat_zeros(2,2); }
+    array result = mat_zeros(2,2);
+    result[0][0] =  m[1][1] / d;
+    result[0][1] = -m[0][1] / d;
+    result[1][0] = -m[1][0] / d;
+    result[1][1] =  m[0][0] / d;
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §13  INTERPOLATION
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Linear interpolation: lerp(a, b, t) = a + t*(b-a)
+export public func math_lerp(a, b, t) {
+    return a + t * (b - a);
+}
+
+-- Inverse lerp: what t maps x to [a,b]?
+export public func math_inv_lerp(a, b, x) {
+    if (a == b) { return 0; }
+    return (x - a) / (b - a);
+}
+
+-- Remap x from [a1,b1] to [a2,b2]
+export public func math_remap(x, a1, b1, a2, b2) {
+    var t = math_inv_lerp(a1, b1, x);
+    return math_lerp(a2, b2, t);
+}
+
+-- Smoothstep (cubic Hermite): smooth 0→1 for t ∈ [0,1]
+export public func math_smoothstep(t) {
+    t = math_clamp(t, 0, 1);
+    return t * t * (3 - 2*t);
+}
+
+-- Smootherstep (quintic): even smoother S-curve
+export public func math_smootherstep(t) {
+    t = math_clamp(t, 0, 1);
+    return t * t * t * (t * (t*6 - 15) + 10);
+}
+
+-- Ease-in (quadratic): slow start
+export public func math_ease_in(t) {
+    t = math_clamp(t, 0, 1);
+    return t * t;
+}
+
+-- Ease-out (quadratic): slow end
+export public func math_ease_out(t) {
+    t = math_clamp(t, 0, 1);
+    return 1 - (1 - t) * (1 - t);
+}
+
+-- Element-wise lerp on two arrays
+export public func arr_lerp(a, b, t) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) {
+        result.add(a[i] + t * (b[i] - a[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §14  GEOMETRY
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Convert degrees to radians
+export public func math_deg2rad(deg) {
+    return deg * 3.14159265358979323846 / 180.0;
+}
+
+-- Convert radians to degrees
+export public func math_rad2deg(rad) {
+    return rad * 180.0 / 3.14159265358979323846;
+}
+
+-- 2D Euclidean distance
+export public func math_dist2d(x1, y1, x2, y2) {
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    return math_sqrt(dx*dx + dy*dy);
+}
+
+-- 3D Euclidean distance
+export public func math_dist3d(x1, y1, z1, x2, y2, z2) {
+    var dx = x2-x1;
+    var dy = y2-y1;
+    var dz = z2-z1;
+    return math_sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+-- Manhattan distance (2D)
+export public func math_manhattan(x1, y1, x2, y2) {
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    if (dx < 0) { dx = -dx; }
+    if (dy < 0) { dy = -dy; }
+    return dx + dy;
+}
+
+-- Point on unit circle at angle theta (returns [x, y])
+export public func math_circle_pt(theta) {
+    array result = [];
+    result.add(math_cos(theta));
+    result.add(math_sin(theta));
+    return result;
+}
+
+-- Cross product of 2D vectors (returns scalar z-component)
+export public func math_cross2d(ax, ay, bx, by) {
+    return ax*by - ay*bx;
+}
+
+-- Cross product of 3D vectors (returns [x, y, z])
+export public func math_cross3d(ax, ay, az, bx, by, bz) {
+    array result = [];
+    result.add(ay*bz - az*by);
+    result.add(az*bx - ax*bz);
+    result.add(ax*by - ay*bx);
+    return result;
+}
+
+-- Dot product of 2D vectors
+export public func math_dot2d(ax, ay, bx, by) {
+    return ax*bx + ay*by;
+}
+
+-- Angle between two 2D vectors (radians)
+export public func math_angle_between(ax, ay, bx, by) {
+    var d = math_dot2d(ax, ay, bx, by);
+    var na = math_sqrt(ax*ax + ay*ay);
+    var nb = math_sqrt(bx*bx + by*by);
+    if (na == 0 || nb == 0) { return 0; }
+    return math_acos(math_clamp(d / (na*nb), -1.0, 1.0));
+}
+
+-- Area of triangle with vertices (x1,y1),(x2,y2),(x3,y3)
+export public func math_tri_area(x1, y1, x2, y2, x3, y3) {
+    var a = math_abs((x2-x1)*(y3-y1) - (x3-x1)*(y2-y1));
+    return a / 2.0;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §15  PSEUDO-RANDOM (LCG — seeded, reproducible)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- LCG state (global variable)
+var _rand_state = 12345;
+
+-- Seed the RNG
+export public func math_seed(s) {
+    _rand_state = s;
+}
+
+-- Raw LCG integer in [0, 2^31)
+private func lcg_next() {
+    _rand_state = (_rand_state * 1664525 + 1013904223) % 2147483648;
+    return _rand_state;
+}
+
+-- Random float in [0, 1)
+export public func math_rand() {
+    return lcg_next() / 2147483648.0;
+}
+
+-- Random integer in [lo, hi] (inclusive)
+export public func math_rand_int(lo, hi) {
+    return lo + lcg_next() % (hi - lo + 1);
+}
+
+-- Random float in [lo, hi)
+export public func math_rand_range(lo, hi) {
+    return lo + math_rand() * (hi - lo);
+}
+
+-- Box-Muller transform → approx Gaussian N(mean, std)
+export public func math_rand_gauss(mean, std) {
+    var u1 = math_rand();
+    var u2 = math_rand();
+    -- Avoid log(0)
+    if (u1 < 1e-10) { u1 = 1e-10; }
+    var z = math_sqrt(-2.0 * math_ln(u1)) * math_cos(6.28318530717958647692 * u2);
+    return mean + z * std;
+}
+
+-- Shuffle an array in-place (Fisher-Yates)
+export public func math_shuffle(arr) {
+    var n = arr.length();
+    var i = n - 1;
+    while (i > 0) {
+        var j = lcg_next() % (i + 1);
+        var tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+        i = i - 1;
+    }
+}
+
+-- Sample k unique elements from arr (without replacement)
+export public func math_sample(arr, k) {
+    -- Copy + shuffle, take first k
+    array copy = [];
+    var i = 0;
+    while (i < arr.length()) { copy.add(arr[i]); i = i + 1; }
+    math_shuffle(copy);
+    array result = [];
+    i = 0;
+    while (i < k && i < copy.length()) { result.add(copy[i]); i = i + 1; }
+    return result;
+}

@@ -1,0 +1,226 @@
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║  libmap.chn  —  Hash Map standard library                    ║
+-- ║                                                              ║
+-- ║  Implements an ordered key-value map using two parallel      ║
+-- ║  arrays: m[0] = keys array, m[1] = values array.            ║
+-- ║  Keys are compared with ==, so strings, numbers, and bools  ║
+-- ║  all work as keys.                                           ║
+-- ║                                                              ║
+-- ║  Usage:                                                      ║
+-- ║    imp "libmap"                                              ║
+-- ║    var m = map_new();                                        ║
+-- ║    map_set(m, "name", "Alice");                              ║
+-- ║    stdo(map_get(m, "name"));                                 ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
+-- ─── Construction ──────────────────────────────────────────────────────────
+
+-- Create a new empty map.
+-- Internal layout: [ [key0, key1, ...], [val0, val1, ...] ]
+export public func map_new() {
+    array keys = [];
+    array vals = [];
+    array m    = [];
+    m.add(keys);
+    m.add(vals);
+    return m;
+}
+
+-- ─── Core operations ───────────────────────────────────────────────────────
+
+-- Private helper: find the index of a key, or -1
+private func map_find(m, key) {
+    array keys = m[0];
+    var i = 0;
+    while (i < keys.length()) {
+        if (keys[i] == key) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+-- Set key → value (inserts or updates)
+export public func map_set(m, key, val) {
+    var i = map_find(m, key);
+    if (i >= 0) {
+        m[1][i] = val;
+    } else {
+        m[0].add(key);
+        m[1].add(val);
+    }
+}
+
+-- Get value for key (returns nil if key not present)
+export public func map_get(m, key) {
+    var i = map_find(m, key);
+    if (i < 0) { return nil; }
+    return m[1][i];
+}
+
+-- Get value for key, returning default_val if key not present
+export public func map_get_or(m, key, default_val) {
+    var i = map_find(m, key);
+    if (i < 0) { return default_val; }
+    return m[1][i];
+}
+
+-- True if the map contains the key
+export public func map_has(m, key) {
+    return map_find(m, key) >= 0;
+}
+
+-- Remove a key-value pair (no-op if key not present)
+export public func map_delete(m, key) {
+    var i = map_find(m, key);
+    if (i < 0) { return; }
+    m[0].cut(i);
+    m[1].cut(i);
+}
+
+-- ─── Info ──────────────────────────────────────────────────────────────────
+
+-- Number of key-value pairs
+export public func map_size(m) {
+    return m[0].length();
+}
+
+-- True if the map has no entries
+export public func map_is_empty(m) {
+    return m[0].length() == 0;
+}
+
+-- Return all keys as an array (in insertion order)
+export public func map_keys(m) {
+    array result = [];
+    var i = 0;
+    while (i < m[0].length()) {
+        result.add(m[0][i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Return all values as an array (in insertion order)
+export public func map_values(m) {
+    array result = [];
+    var i = 0;
+    while (i < m[1].length()) {
+        result.add(m[1][i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- ─── Mutation ──────────────────────────────────────────────────────────────
+
+-- Remove all entries
+export public func map_clear(m) {
+    while (m[0].length() > 0) {
+        m[0].cut(0);
+        m[1].cut(0);
+    }
+}
+
+-- Merge all entries from src into dst (src values win on conflict)
+export public func map_merge(dst, src) {
+    var i = 0;
+    while (i < src[0].length()) {
+        map_set(dst, src[0][i], src[1][i]);
+        i = i + 1;
+    }
+}
+
+-- Return a shallow copy of a map
+export public func map_copy(m) {
+    var result = map_new();
+    var i = 0;
+    while (i < m[0].length()) {
+        map_set(result, m[0][i], m[1][i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- ─── Numeric value helpers ─────────────────────────────────────────────────
+
+-- Increment the numeric value at key by 1 (inserts with value 1 if missing)
+export public func map_inc(m, key) {
+    var i = map_find(m, key);
+    if (i < 0) {
+        m[0].add(key);
+        m[1].add(1);
+    } else {
+        m[1][i] = m[1][i] + 1;
+    }
+}
+
+-- Increment the numeric value at key by n (inserts with value n if missing)
+export public func map_inc_by(m, key, n) {
+    var i = map_find(m, key);
+    if (i < 0) {
+        m[0].add(key);
+        m[1].add(n);
+    } else {
+        m[1][i] = m[1][i] + n;
+    }
+}
+
+-- ─── Display ───────────────────────────────────────────────────────────────
+
+-- Return a string representation "{key: val, key: val, ...}"
+export public func map_to_str(m) {
+    var result = "{";
+    var i = 0;
+    while (i < m[0].length()) {
+        if (i > 0) { result = result + ", "; }
+        result = result + m[0][i] + ": " + m[1][i];
+        i = i + 1;
+    }
+    result = result + "}";
+    return result;
+}
+
+-- ─── Frequency / counting helpers ─────────────────────────────────────────
+
+-- Build a frequency map from an array (count occurrences of each value)
+export public func map_freq(arr) {
+    var m = map_new();
+    var i = 0;
+    while (i < arr.length()) {
+        map_inc(m, arr[i]);
+        i = i + 1;
+    }
+    return m;
+}
+
+-- Return the key with the highest numeric value in the map
+export public func map_max_key(m) {
+    if (m[0].length() == 0) { return nil; }
+    var best_key = m[0][0];
+    var best_val = m[1][0];
+    var i = 1;
+    while (i < m[0].length()) {
+        if (m[1][i] > best_val) {
+            best_val = m[1][i];
+            best_key = m[0][i];
+        }
+        i = i + 1;
+    }
+    return best_key;
+}
+
+-- Return the key with the lowest numeric value in the map
+export public func map_min_key(m) {
+    if (m[0].length() == 0) { return nil; }
+    var best_key = m[0][0];
+    var best_val = m[1][0];
+    var i = 1;
+    while (i < m[0].length()) {
+        if (m[1][i] < best_val) {
+            best_val = m[1][i];
+            best_key = m[0][i];
+        }
+        i = i + 1;
+    }
+    return best_key;
+}

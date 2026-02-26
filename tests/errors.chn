@@ -1,0 +1,3 @@
+-- Test error messages
+var x = 10
+stdo(undefined_var)

@@ -1,0 +1,131 @@
+-- color_test.chn — exercises the color.chn library
+-- Run: ./chn examples/color_test.chn
+
+imp color
+
+stdo("=== color_test.chn ===")
+stdo("")
+
+-- § Named foreground colors ────────────────────────────────────────────────────
+stdo("--- Named Colors ---")
+stdo(red("red text"))
+stdo(green("green text"))
+stdo(yellow("yellow text"))
+stdo(blue("blue text"))
+stdo(cyan("cyan text"))
+stdo(magenta("magenta text"))
+stdo(white("white text"))
+stdo(gray("gray text"))
+
+-- § Bright variants ────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Bright Variants ---")
+stdo(bright_red("bright red"))
+stdo(bright_green("bright green"))
+stdo(bright_yellow("bright yellow"))
+stdo(bright_cyan("bright cyan"))
+
+-- § Text styles ────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Text Styles ---")
+stdo(bold("bold text"))
+stdo(italic("italic text"))
+stdo(underline("underlined text"))
+stdo(strike("strikethrough"))
+stdo(dim("dimmed text"))
+stdo(reverse("reversed video"))
+
+-- § Background colors ──────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Backgrounds ---")
+stdo(bg_red("bg red text"))
+stdo(bg_green("bg green text"))
+stdo(bg_blue("bg blue text"))
+stdo(bg_cyan("bg cyan text"))
+
+-- § Semantic helpers ───────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Semantic ---")
+stdo(success("success: all tests passed"))
+stdo(warning("warning: disk usage above 80%"))
+stdo(error_text("error: connection refused"))
+stdo(info("info: server started on :8080"))
+stdo(muted("muted: debug output"))
+stdo(highlight("highlighted text"))
+stdo(code_text("code_text: func main()"))
+
+-- § Named extras ───────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Extras ---")
+stdo(orange("orange"))
+stdo(pink("pink"))
+stdo(purple("purple"))
+stdo(gold("gold"))
+stdo(teal("teal"))
+stdo(lime("lime"))
+stdo(sky("sky"))
+stdo(coral("coral"))
+
+-- § 256-color mode ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- 256-Color ---")
+stdo(colorize(fg256(196), "red256 (color 196)"))
+stdo(colorize(fg256(46),  "green256 (color 46)"))
+stdo(colorize(fg256(21),  "blue256 (color 21)"))
+stdo(colorize(bg256(226), "bg yellow256"))
+
+-- § RGB true-color ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- True Color RGB ---")
+stdo(colorize(fg_rgb(255, 100, 0), "orange rgb(255,100,0)"))
+stdo(colorize(fg_rgb(100, 200, 255), "light blue rgb(100,200,255)"))
+stdo(colorize(bg_rgb(30, 30, 60), "dark bg with fg default"))
+
+-- § Hex colors ─────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Hex Colors ---")
+stdo(colorize(fg_hex("#FF6600"), "orange #FF6600"))
+stdo(colorize(fg_hex("#00CCFF"), "sky #00CCFF"))
+var rgb = hex_to_rgb("#1E90FF")
+stdo("hex_to_rgb(#1E90FF) → r=" + rgb[0] + " g=" + rgb[1] + " b=" + rgb[2])
+
+-- § Paint helper ───────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Paint ---")
+stdo(paint(FG_BRIGHT_MAGENTA(), BG_DEFAULT(), "magenta on default"))
+stdo(paint(FG_BLACK(), BG_YELLOW(), "black on yellow"))
+stdo(colorize(FG_BRIGHT_WHITE() + BOLD(), "bright white + bold combined"))
+
+-- § Text utilities ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Text Utils ---")
+var raw = red("hello") + " world"
+var stripped = strip_ansi(raw)
+stdo("visible_len of colored text:", visible_len(raw))
+stdo("strip_ansi result:", stripped)
+
+stdo(pad_right("left", 20))
+stdo(pad_left("right", 20))
+stdo(pad_center("center", 20))
+
+-- § Box ────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Box ---")
+stdo(box("Hello from CHN!", FG_CYAN()))
+
+-- § Rainbow ────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Rainbow ---")
+stdo(rainbow("Rainbow text - ROYGBIV"))
+
+-- § Cursor (just emit, don't test interactive movement) ───────────────────────
+stdo("")
+stdo("--- Cursor sequences (emitting, not tested interactively) ---")
+var hide_seq  = cursor_hide()
+var show_seq  = cursor_show()
+var save_seq  = cursor_save()
+var rest_seq  = cursor_restore()
+stdo("cursor sequences generated: hide=" + hide_seq.length() + " show=" + show_seq.length())
+
+stdo("")
+stdo("=== color_test PASSED ===")

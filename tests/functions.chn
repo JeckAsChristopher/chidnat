@@ -1,0 +1,82 @@
+-- ============================================================
+--  Function demo: public / private / protected
+-- ============================================================
+
+-- 1. PUBLIC function — accessible everywhere
+public func greet(name) {
+    return "Hello, " + name + "!";
+}
+
+stdo(greet("World"));
+stdo(greet("Alice"));
+
+
+-- 2. PRIVATE function — only usable inside this file
+private func square(n) {
+    return n * n;
+}
+
+stdo("4 squared =", square(4));
+stdo("7 squared =", square(7));
+
+
+-- 3. PROTECTED function — accessible here + files that import this one
+protected func clamp(value, lo, hi) {
+    if (value < lo) { return lo; }
+    if (value > hi) { return hi; }
+    return value;
+}
+
+stdo("clamp(15, 0, 10) =", clamp(15, 0, 10));
+stdo("clamp(-5, 0, 10) =", clamp(-5, 0, 10));
+stdo("clamp(7,  0, 10) =", clamp(7,  0, 10));
+
+
+-- 4. Recursive function (factorial)
+public func factorial(n) {
+    if (n <= 1) { return 1; }
+    return n * factorial(n - 1);
+}
+
+stdo("5! =", factorial(5));
+stdo("10! =", factorial(10));
+
+
+-- 5. Function that uses a for loop internally
+public func sum_to(n) {
+    var total = 0;
+    for (var i = 1; i <= n; i = i + 1) {
+        total = total + i;
+    }
+    return total;
+}
+
+stdo("sum 1..100 =", sum_to(100));
+
+
+-- 6. Function calling another function
+public func hypotenuse(a, b) {
+    return sum_to(1);   -- just demonstrate calling
+}
+
+public func is_even(n) {
+    return n % 2 == 0;
+}
+
+public func fizzbuzz_word(n) {
+    if (n % 15 == 0) { return "FizzBuzz"; }
+    if (n % 3  == 0) { return "Fizz"; }
+    if (n % 5  == 0) { return "Buzz"; }
+    return n;
+}
+
+stdo("--- FizzBuzz via function ---");
+for (var i = 1; i <= 15; i = i + 1) {
+    stdo(fizzbuzz_word(i));
+}
+
+
+-- 7. Return value used in expressions
+stdo("factorial(5) + factorial(3) =", factorial(5) + factorial(3));
+stdo("is_even(42):", is_even(42));
+stdo("is_even(7):", is_even(7));

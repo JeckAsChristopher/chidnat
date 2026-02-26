@@ -1,0 +1,4 @@
+imp "libvector.chn"
+
+vec_new()
+stdo(vec_new())

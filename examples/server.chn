@@ -1,0 +1,23 @@
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  server.chn  —  CHN HTTP Server Example                             ║
+-- ║                                                                      ║
+-- ║  Run:   ./chn examples/server.chn                                   ║
+-- ║  Open:  http://localhost:8080                                        ║
+-- ║                                                                      ║
+-- ║  Routes                                                              ║
+-- ║    GET  /                     → welcome page                         ║
+-- ║    GET  /api/hello            → JSON greeting                        ║
+-- ║    GET  /api/time             → current server time                  ║
+-- ║    GET  /api/echo?msg=...     → echoes your message back             ║
+-- ║    GET  /api/stats            → uptime & request count               ║
+-- ║    GET  /notes                → list all notes (HTML)                ║
+-- ║    POST /notes                → save a note  (body: text=...)        ║
+-- ║    GET  /notes/:id            → read one note                        ║
+-- ║    DELETE /notes/:id          → delete a note                        ║
+-- ║    GET  /health               → liveness probe                       ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+imp os
+imp color
+imp network
+imp map

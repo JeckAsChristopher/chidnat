@@ -1,0 +1,174 @@
+-- bin_test.chn — exercises the bin.chn library
+-- Run: ./chn examples/bin_test.chn
+
+imp bin
+
+stdo("=== bin_test.chn ===")
+stdo("")
+
+-- § Bitwise operations ─────────────────────────────────────────────────────────
+stdo("--- Bitwise ---")
+stdo("AND  10 & 12 =", bin_and(10, 12))   -- 8
+stdo("OR   10 | 5 =", bin_or(10, 5))      -- 15
+stdo("XOR  10 ^ 15 =", bin_xor(10, 15))   -- 5
+stdo("NOT  ~1 (low8)  =", bin_and(bin_not(1), 255))  -- 254
+stdo("SHL  1 << 4          =", bin_shl(1, 4))      -- 16
+stdo("SHR  128 >> 3        =", bin_shr(128, 3))    -- 16
+stdo("ROTL 1 rotl 2   =", bin_and(bin_rotl(1, 2), 255)) -- 4
+stdo("SAR  -8 sar 1 (u32) =", bin_sar(-8, 1))   -- 4294967292 = 0xFFFFFFFC (signed -4)
+
+-- § Bit inspection ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Bit inspection ---")
+stdo("popcount(255)   =", bin_popcount(255))    -- 8
+stdo("popcount(170)   =", bin_popcount(170))    -- 4 (10101010)
+stdo("clz(1)          =", bin_clz(1))
+stdo("ctz(8)          =", bin_ctz(8))           -- 3
+stdo("parity(7)       =", bin_parity(7))        -- 1 (odd bits)
+stdo("parity(255)     =", bin_parity(255))      -- 0 (even bits)
+stdo("is_pow2(16)     =", bin_is_pow2(16))      -- true
+stdo("is_pow2(15)     =", bin_is_pow2(15))      -- false
+stdo("next_pow2(5)    =", bin_next_pow2(5))     -- 8
+
+-- § Bit manipulation ───────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Bit manipulation ---")
+var n = 0
+n = bin_set(n, 3)          -- set bit 3
+stdo("set bit 3:", n)       -- 8
+n = bin_set(n, 0)          -- set bit 0
+stdo("set bit 0:", n)       -- 9
+n = bin_clear(n, 3)        -- clear bit 3
+stdo("clear bit 3:", n)     -- 1
+n = bin_toggle(n, 1)       -- toggle bit 1
+stdo("toggle bit 1:", n)    -- 3
+stdo("get bit 1:", bin_get(3, 1))  -- 1
+stdo("get bit 2:", bin_get(3, 2))  -- 0
+
+var extracted = bin_extract(218, 2, 6)
+stdo("extract bits 2..6 from 0b11011010:", extracted)
+var deposited = bin_deposit(0, 7, 2, 5)
+stdo("deposit 7 into bits 2..5:", deposited)
+
+-- § Representation ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Representation ---")
+stdo("bin_to_str(42)  =", bin_to_str(42))
+stdo("bin_to_hex(255) =", bin_to_hex(255))
+stdo("bin_to_oct(64)  =", bin_to_oct(64))
+stdo("bin_from_str('101010') =", bin_from_str("101010"))   -- 42
+stdo("bin_from_hex('ff') =", bin_from_hex("ff"))            -- 255
+
+-- § Byte packing ───────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Byte packing ---")
+var b8 = bin_pack_u8(0xAB)
+stdo("pack_u8(0xAB):", b8)
+
+var b16le = bin_pack_u16_le(0x1234)
+stdo("pack_u16_le(0x1234):", b16le)
+
+var b32le = bin_pack_u32_le(0xDEADBEEF)
+stdo("pack_u32_le(0xDEADBEEF):", b32le)
+
+stdo("unpack_u16_le:", bin_unpack_u16_le(b16le, 0))   -- 0x1234 = 4660
+stdo("unpack_u32_le:", bin_unpack_u32_le(b32le, 0))   -- 0xDEADBEEF
+
+-- § Byte array ops ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Byte arrays ---")
+var arr = bin_alloc(4)
+bin_fill(arr, 0)
+arr[0] = 1
+arr[1] = 2
+arr[2] = 3
+arr[3] = 4
+stdo("arr:", arr)
+
+var sliced = bin_slice(arr, 1, 3)
+stdo("slice[1..3]:", sliced)
+
+var rev = bin_reverse(arr)
+stdo("reversed:", rev)
+
+var a2 = bin_alloc(4)
+a2[0] = 5
+a2[1] = 6
+a2[2] = 7
+a2[3] = 8
+var cat = bin_concat(arr, a2)
+stdo("concat:", cat)
+stdo("cmp same:", bin_cmp(arr, arr))
+stdo("cmp diff:", bin_cmp(arr, a2))
+
+-- § Checksums and hashes ───────────────────────────────────────────────────────
+stdo("")
+stdo("--- Checksums & Hashes ---")
+var data = bin_str_to_bytes("Hello CHN")
+stdo("data:", data)
+stdo("sum8:", bin_sum8(data))
+stdo("xor_check:", bin_xor_check(data))
+stdo("crc8:", bin_crc8(data))
+stdo("crc16:", bin_crc16(data))
+stdo("adler32:", bin_adler32(data))
+stdo("fletcher16:", bin_fletcher16(data))
+stdo("fnv32:", bin_fnv32(data))
+stdo("djb2:", bin_djb2(data))
+stdo("sdbm:", bin_sdbm(data))
+stdo("hash_str:", bin_hash_str("Hello CHN"))
+
+-- § Encoding ───────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Encoding ---")
+var msg = bin_str_to_bytes("hello world")
+var b64 = bin_base64_encode(msg)
+stdo("base64 encode:", b64)
+var back = bin_base64_decode(b64)
+stdo("base64 roundtrip length:", back.length())
+
+var hex_enc = bin_hex_encode(msg)
+stdo("hex encode:", hex_enc)
+var hex_dec = bin_hex_decode(hex_enc)
+stdo("hex roundtrip length:", hex_dec.length())
+
+-- § XOR cipher ─────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- XOR cipher ---")
+var plaintext = bin_str_to_bytes("Secret!")
+var key = bin_str_to_bytes("KEY")
+var encrypted = bin_xor_crypt(plaintext, key)
+var decrypted = bin_xor_crypt(encrypted, key)
+stdo("encrypted:", encrypted)
+stdo("decrypted matches:", bin_cmp(decrypted, plaintext))
+
+-- § Hexdump ────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Hexdump ---")
+stdo(bin_hexdump(msg))
+
+-- § Binary file I/O ────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- Binary file I/O ---")
+var binpath = "/tmp/chn_bin_test.bin"
+var payload = bin_str_to_bytes("CHN binary test\n")
+bin_write(binpath, payload)
+var readback = bin_read(binpath)
+stdo("write/read roundtrip length:", readback.length())
+stdo("first byte:", readback[0])    -- 'C' = 67
+
+-- § .chndata record format ─────────────────────────────────────────────────────
+stdo("")
+stdo("--- .chndata ---")
+array records = []
+var r1 = bin_str_to_bytes("record1_data")
+var r2 = bin_str_to_bytes("record2_data")
+records.add(r1)
+records.add(r2)
+var chnpath = "/tmp/chn_test.chndata"
+bin_write_chndata(chnpath, records)
+var loaded = bin_read_chndata(chnpath)
+stdo("record count:", loaded.length())
+stdo("record[0] length:", loaded[0].length())
+
+stdo("")
+stdo("=== bin_test PASSED ===")

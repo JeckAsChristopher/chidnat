@@ -1,0 +1,15 @@
+-- stdi test: read name and age
+let name;
+let age;
+
+stdo("Enter your name: ");
+stdi(name);
+
+stdo("Enter your age: ");
+stdi(age);
+
+stdo("Hello,", name + "! You are", age, "years old.");
+
+-- Type auto-detection: numeric input becomes a number
+var doubled = age * 2;
+stdo("Double your age:", doubled);

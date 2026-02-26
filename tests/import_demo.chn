@@ -1,0 +1,18 @@
+-- import_demo.chn — uses mathlib.chn
+imp "mathlib.chn"
+
+stdo("=== Math Library Import Demo ===");
+stdo("abs_val(-42)   =", abs_val(-42));
+stdo("abs_val(7)     =", abs_val(7));
+stdo("power(2, 10)   =", power(2, 10));
+stdo("power(3, 4)    =", power(3, 4));
+stdo("clamp(15, 0, 10) =", clamp(15, 0, 10));
+stdo("normalize(25, 0, 20) =", normalize(25, 0, 20));
+
+-- Function calls used inside expressions
+var dist = abs_val(-99) + abs_val(1);
+stdo("|-99| + |1| =", dist);
+
+-- Protected access check — clamp is accessible because we imported mathlib
+var bounded = clamp(500, 0, 100);
+stdo("clamp(500,0,100) =", bounded);

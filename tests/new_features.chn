@@ -1,0 +1,27 @@
+-- ===== Test: let without initializer =====
+let input;
+stdo("input is nil:", input);
+
+-- ===== Test: for loop =====
+stdo("--- for loop counting up ---");
+for (var i = 0; i < 5; i = i + 1) {
+    stdo(i);
+}
+
+stdo("--- for loop counting down ---");
+for (var j = 10; j > 0; j = j - 3) {
+    stdo(j);
+}
+
+stdo("--- for loop FizzBuzz 1-15 ---");
+for (var n = 1; n <= 15; n = n + 1) {
+    if (n % 15 == 0) {
+        stdo("FizzBuzz");
+    } else if (n % 3 == 0) {
+        stdo("Fizz");
+    } else if (n % 5 == 0) {
+        stdo("Buzz");
+    } else {
+        stdo(n);
+    }
+}

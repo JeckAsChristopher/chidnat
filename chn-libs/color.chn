@@ -1,0 +1,519 @@
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  color.chn  —  ANSI Color & Terminal Library for CHN                ║
+-- ║                                                                      ║
+-- ║  imp color                                                           ║
+-- ║                                                                      ║
+-- ║  Requires \e escape support (added to CHN lexer in v5).             ║
+-- ║                                                                      ║
+-- ║  Sections:                                                           ║
+-- ║    1.  Raw ANSI escape codes (constants as zero-arg functions)       ║
+-- ║    2.  Foreground colors  (8 standard + 8 bright)                   ║
+-- ║    3.  Background colors  (8 standard + 8 bright)                   ║
+-- ║    4.  Text styles        (bold, dim, italic, underline, …)         ║
+-- ║    5.  256-color mode     (fg256 / bg256)                           ║
+-- ║    6.  True-color RGB     (fg_rgb / bg_rgb)                         ║
+-- ║    7.  Cursor movement    (up/down/left/right, goto, save/restore)  ║
+-- ║    8.  Terminal control   (clear, erase, scroll, title, bell)       ║
+-- ║    9.  Paint helpers      (colorize, strip, box, gradient text)     ║
+-- ║   10.  Named palette      (red, green, yellow, …, rainbow)         ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §1  Core escape primitives
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ESC character (0x1b).  "\e" is now a valid CHN string escape.
+export public func ESC()    { return "\e"; }
+
+-- CSI = Control Sequence Introducer: ESC + [
+export public func CSI()    { return "\e["; }
+
+-- Reset all attributes to terminal default.
+export public func RESET()  { return "\e[0m"; }
+
+-- Internal: build a CSI sequence with one numeric arg
+private func _csi1(n) { return "\e[" + n + "m"; }
+
+-- Internal: build a CSI sequence with two numeric args
+private func _csi2(a, b) { return "\e[" + a + ";" + b + "m"; }
+
+-- Internal: build a CSI sequence with three numeric args (for RGB)
+private func _csi3(a, b, cc) { return "\e[" + a + ";" + b + ";" + cc + "m"; }
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §2  Foreground colors
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Standard foreground (codes 30–37)
+export public func FG_BLACK()   { return "\e[30m"; }
+export public func FG_RED()     { return "\e[31m"; }
+export public func FG_GREEN()   { return "\e[32m"; }
+export public func FG_YELLOW()  { return "\e[33m"; }
+export public func FG_BLUE()    { return "\e[34m"; }
+export public func FG_MAGENTA() { return "\e[35m"; }
+export public func FG_CYAN()    { return "\e[36m"; }
+export public func FG_WHITE()   { return "\e[37m"; }
+export public func FG_DEFAULT() { return "\e[39m"; }
+
+-- Bright / intense foreground (codes 90–97)
+export public func FG_BRIGHT_BLACK()   { return "\e[90m"; }   -- "dark gray"
+export public func FG_BRIGHT_RED()     { return "\e[91m"; }
+export public func FG_BRIGHT_GREEN()   { return "\e[92m"; }
+export public func FG_BRIGHT_YELLOW()  { return "\e[93m"; }
+export public func FG_BRIGHT_BLUE()    { return "\e[94m"; }
+export public func FG_BRIGHT_MAGENTA() { return "\e[95m"; }
+export public func FG_BRIGHT_CYAN()    { return "\e[96m"; }
+export public func FG_BRIGHT_WHITE()   { return "\e[97m"; }
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §3  Background colors
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Standard background (codes 40–47)
+export public func BG_BLACK()   { return "\e[40m"; }
+export public func BG_RED()     { return "\e[41m"; }
+export public func BG_GREEN()   { return "\e[42m"; }
+export public func BG_YELLOW()  { return "\e[43m"; }
+export public func BG_BLUE()    { return "\e[44m"; }
+export public func BG_MAGENTA() { return "\e[45m"; }
+export public func BG_CYAN()    { return "\e[46m"; }
+export public func BG_WHITE()   { return "\e[47m"; }
+export public func BG_DEFAULT() { return "\e[49m"; }
+
+-- Bright background (codes 100–107)
+export public func BG_BRIGHT_BLACK()   { return "\e[100m"; }
+export public func BG_BRIGHT_RED()     { return "\e[101m"; }
+export public func BG_BRIGHT_GREEN()   { return "\e[102m"; }
+export public func BG_BRIGHT_YELLOW()  { return "\e[103m"; }
+export public func BG_BRIGHT_BLUE()    { return "\e[104m"; }
+export public func BG_BRIGHT_MAGENTA() { return "\e[105m"; }
+export public func BG_BRIGHT_CYAN()    { return "\e[106m"; }
+export public func BG_BRIGHT_WHITE()   { return "\e[107m"; }
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §4  Text styles
+-- ═══════════════════════════════════════════════════════════════════════
+
+export public func BOLD()          { return "\e[1m";  }
+export public func DIM()           { return "\e[2m";  }
+export public func ITALIC()        { return "\e[3m";  }
+export public func UNDERLINE()     { return "\e[4m";  }
+export public func BLINK()         { return "\e[5m";  }
+export public func BLINK_FAST()    { return "\e[6m";  }
+export public func REVERSE()       { return "\e[7m";  }   -- swap fg/bg
+export public func HIDDEN()        { return "\e[8m";  }   -- invisible text
+export public func STRIKETHROUGH() { return "\e[9m";  }
+export public func DOUBLE_UNDERLINE() { return "\e[21m"; }
+export public func OVERLINE()      { return "\e[53m"; }
+
+-- Individual resets
+export public func NO_BOLD()       { return "\e[22m"; }
+export public func NO_ITALIC()     { return "\e[23m"; }
+export public func NO_UNDERLINE()  { return "\e[24m"; }
+export public func NO_BLINK()      { return "\e[25m"; }
+export public func NO_REVERSE()    { return "\e[27m"; }
+export public func NO_HIDDEN()     { return "\e[28m"; }
+export public func NO_STRIKE()     { return "\e[29m"; }
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §5  256-color mode
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Set foreground to one of the 256 terminal colors (0–255).
+-- 0–7: standard colors, 8–15: bright, 16–231: 6×6×6 cube, 232–255: grayscale.
+export public func fg256(n) {
+    return "\e[38;5;" + n + "m";
+}
+
+-- Set background to one of the 256 terminal colors (0–255).
+export public func bg256(n) {
+    return "\e[48;5;" + n + "m";
+}
+
+-- Convenience: underline in 256-color
+export public func ul256(n) {
+    return "\e[58;5;" + n + "m";
+}
+
+-- Convert RGB values (0–5 each) to the 256-color cube index (16–231).
+export public func rgb_to_256(r, g, b) {
+    return 16 + 36*r + 6*g + b;
+}
+
+-- Grayscale index: level 0–23 → color index 232–255.
+export public func gray256(level) {
+    return 232 + level;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §6  True-color (24-bit) RGB
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Set foreground to exact RGB color (r,g,b each 0–255).
+export public func fg_rgb(r, g, b) {
+    return "\e[38;2;" + r + ";" + g + ";" + b + "m";
+}
+
+-- Set background to exact RGB color.
+export public func bg_rgb(r, g, b) {
+    return "\e[48;2;" + r + ";" + g + ";" + b + "m";
+}
+
+-- Set underline color to exact RGB.
+export public func ul_rgb(r, g, b) {
+    return "\e[58;2;" + r + ";" + g + ";" + b + "m";
+}
+
+-- Parse a hex color string like "#FF8800" into [r,g,b].
+export public func hex_to_rgb(hex) {
+    var h = hex;
+    if (h.length() > 0 && h[0] == "#") {
+        var tmp = "";
+        var i = 1;
+        while (i < h.length()) { tmp = tmp + h[i]; i = i + 1; }
+        h = tmp;
+    }
+    var r = _hex2(h, 0);
+    var g = _hex2(h, 2);
+    var b = _hex2(h, 4);
+    array rgb = [r, g, b];
+    return rgb;
+}
+
+-- Set foreground from a hex color string "#RRGGBB".
+export public func fg_hex(hex) {
+    var rgb = hex_to_rgb(hex);
+    return fg_rgb(rgb[0], rgb[1], rgb[2]);
+}
+
+-- Set background from a hex color string "#RRGGBB".
+export public func bg_hex(hex) {
+    var rgb = hex_to_rgb(hex);
+    return bg_rgb(rgb[0], rgb[1], rgb[2]);
+}
+
+-- Internal: parse 2 hex digits from string s at offset off
+private func _hex2(s, off) {
+    var hi = _hdigit(s[off]);
+    var lo = _hdigit(s[off+1]);
+    return hi * 16 + lo;
+}
+private func _hdigit(ch) {
+    if (ch == "0") { return 0; }  if (ch == "1") { return 1; }
+    if (ch == "2") { return 2; }  if (ch == "3") { return 3; }
+    if (ch == "4") { return 4; }  if (ch == "5") { return 5; }
+    if (ch == "6") { return 6; }  if (ch == "7") { return 7; }
+    if (ch == "8") { return 8; }  if (ch == "9") { return 9; }
+    if (ch == "a" || ch == "A") { return 10; }
+    if (ch == "b" || ch == "B") { return 11; }
+    if (ch == "c" || ch == "C") { return 12; }
+    if (ch == "d" || ch == "D") { return 13; }
+    if (ch == "e" || ch == "E") { return 14; }
+    if (ch == "f" || ch == "F") { return 15; }
+    return 0;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §7  Cursor movement
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Move cursor up/down/left/right by n cells.
+export public func cursor_up(n)    { return "\e[" + n + "A"; }
+export public func cursor_down(n)  { return "\e[" + n + "B"; }
+export public func cursor_right(n) { return "\e[" + n + "C"; }
+export public func cursor_left(n)  { return "\e[" + n + "D"; }
+
+-- Move to beginning of line, n lines down/up.
+export public func cursor_next_line(n) { return "\e[" + n + "E"; }
+export public func cursor_prev_line(n) { return "\e[" + n + "F"; }
+
+-- Move to column n (1-based).
+export public func cursor_col(n)   { return "\e[" + n + "G"; }
+
+-- Move to row r, column c (1-based).
+export public func cursor_goto(r, c) { return "\e[" + r + ";" + c + "H"; }
+
+-- Save and restore cursor position.
+export public func cursor_save()    { return "\e[s"; }
+export public func cursor_restore() { return "\e[u"; }
+
+-- Hide / show cursor.
+export public func cursor_hide()    { return "\e[?25l"; }
+export public func cursor_show()    { return "\e[?25h"; }
+
+-- Enable / disable cursor blinking.
+export public func cursor_blink_on()  { return "\e[?12h"; }
+export public func cursor_blink_off() { return "\e[?12l"; }
+
+-- Report cursor position request (terminal replies with ESC[r;cR).
+export public func cursor_pos_request() { return "\e[6n"; }
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §8  Terminal control
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Clear the entire screen and move cursor to top-left.
+export public func clear_screen()     { return "\e[2J\e[H"; }
+
+-- Clear from cursor to end of screen.
+export public func clear_to_end()     { return "\e[0J"; }
+
+-- Clear from cursor to beginning of screen.
+export public func clear_to_start()   { return "\e[1J"; }
+
+-- Clear entire current line.
+export public func clear_line()       { return "\e[2K"; }
+
+-- Clear from cursor to end of line.
+export public func clear_line_end()   { return "\e[0K"; }
+
+-- Clear from cursor to beginning of line.
+export public func clear_line_start() { return "\e[1K"; }
+
+-- Insert n blank lines at cursor.
+export public func insert_lines(n)    { return "\e[" + n + "L"; }
+
+-- Delete n lines at cursor.
+export public func delete_lines(n)    { return "\e[" + n + "M"; }
+
+-- Scroll up n lines.
+export public func scroll_up(n)       { return "\e[" + n + "S"; }
+
+-- Scroll down n lines.
+export public func scroll_down(n)     { return "\e[" + n + "T"; }
+
+-- Set terminal window title (works in most terminal emulators).
+export public func set_title(title)   { return "\e]0;" + title + "\e\\"; }
+
+-- Ring terminal bell.
+export public func bell()             { return "\a"; }
+
+-- Enter / exit alternate screen buffer (like vim does).
+export public func alt_screen_on()    { return "\e[?1049h"; }
+export public func alt_screen_off()   { return "\e[?1049l"; }
+
+-- Enable / disable line wrapping.
+export public func wrap_on()          { return "\e[?7h"; }
+export public func wrap_off()         { return "\e[?7l"; }
+
+-- Enable bracketed paste mode.
+export public func paste_mode_on()    { return "\e[?2004h"; }
+export public func paste_mode_off()   { return "\e[?2004l"; }
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §9  Paint helpers
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Wrap text in a color code + reset.
+-- colorize(FG_RED(), "danger")  →  "\e[31mdanger\e[0m"
+export public func colorize(code, text) {
+    return code + text + RESET();
+}
+
+-- Apply bold style to text.
+export public func bold(text)      { return BOLD() + text + NO_BOLD(); }
+
+-- Apply italic style to text.
+export public func italic(text)    { return ITALIC() + text + NO_ITALIC(); }
+
+-- Apply underline style to text.
+export public func underline(text) { return UNDERLINE() + text + NO_UNDERLINE(); }
+
+-- Apply strikethrough.
+export public func strike(text)    { return STRIKETHROUGH() + text + NO_STRIKE(); }
+
+-- Apply dim/faint.
+export public func dim(text)       { return DIM() + text + NO_BOLD(); }
+
+-- Reverse fg/bg.
+export public func reverse(text)   { return REVERSE() + text + NO_REVERSE(); }
+
+-- Foreground + background together.
+export public func paint(fg_code, bg_code, text) {
+    return fg_code + bg_code + text + RESET();
+}
+
+-- Strip ANSI codes from a string (keeps only printable chars).
+-- Removes ESC[...m sequences. Simple state-machine approach.
+export public func strip_ansi(s) {
+    var out   = "";
+    var i     = 0;
+    var in_esc = false;
+    while (i < s.length()) {
+        var ch = s[i];
+        if (in_esc == false) {
+            if (ch == "\e") { in_esc = true; }
+            if (ch != "\e") { out = out + ch; }
+        } else {
+            -- Skip until we hit a letter (end of CSI sequence)
+            var code = _char_ord(ch);
+            if (code >= 64 && code <= 126) { in_esc = false; }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+-- Return the visible length of a string (ignoring ANSI codes).
+export public func visible_len(s) {
+    return strip_ansi(s).length();
+}
+
+-- Pad text to width (right-pad with spaces) respecting ANSI codes.
+export public func pad_right(text, width) {
+    var vis = visible_len(text);
+    var out = text;
+    while (vis < width) { out = out + " "; vis = vis + 1; }
+    return out;
+}
+
+-- Pad text to width (left-pad with spaces).
+export public func pad_left(text, width) {
+    var vis = visible_len(text);
+    var out = "";
+    while (vis < width) { out = out + " "; vis = vis + 1; }
+    return out + text;
+}
+
+-- Center text within width.
+export public func pad_center(text, width) {
+    var vis  = visible_len(text);
+    var pad  = width - vis;
+    var lpad = pad / 2;
+    var rpad = pad - lpad;
+    var out  = "";
+    var i = 0;
+    while (i < lpad) { out = out + " "; i = i + 1; }
+    out = out + text;
+    i = 0;
+    while (i < rpad) { out = out + " "; i = i + 1; }
+    return out;
+}
+
+-- Draw a simple box around text.
+-- box("Hello", FG_CYAN())  →  colored box with "Hello" inside
+export public func box(text, color_code) {
+    var vis = visible_len(text);
+    var top = "";
+    var mid = "";
+    var bot = "";
+    var i = 0;
+    while (i < vis + 2) { top = top + "─"; i = i + 1; }
+    mid = "│ " + text + " │";
+    i = 0;
+    while (i < vis + 2) { bot = bot + "─"; i = i + 1; }
+    return color_code + "╭" + top + "╮" + RESET() + "\n" + color_code + mid + RESET() + "\n" + color_code + "╰" + bot + "╯" + RESET();
+}
+
+-- Gradient text: cycles through a list of fg256 colors.
+-- gradient("Hello", [196, 202, 208, 214, 220])
+export public func gradient(text, colors) {
+    var out = "";
+    var nc  = colors.length();
+    if (nc == 0) { return text; }
+    var i = 0;
+    while (i < text.length()) {
+        var ci = i % nc;
+        out = out + fg256(colors[ci]) + text[i];
+        i = i + 1;
+    }
+    out = out + RESET();
+    return out;
+}
+
+-- Rainbow text using standard 6 colors cycling.
+export public func rainbow(text) {
+    array cols = [196, 202, 226, 46, 21, 93];
+    return gradient(text, cols);
+}
+
+-- Internal: get ordinal value of a character (for strip_ansi)
+private func _char_ord(ch) {
+    if (ch == "@") { return 64; }  if (ch == "A") { return 65; }
+    if (ch == "B") { return 66; }  if (ch == "C") { return 67; }
+    if (ch == "D") { return 68; }  if (ch == "E") { return 69; }
+    if (ch == "F") { return 70; }  if (ch == "G") { return 71; }
+    if (ch == "H") { return 72; }  if (ch == "I") { return 73; }
+    if (ch == "J") { return 74; }  if (ch == "K") { return 75; }
+    if (ch == "L") { return 76; }  if (ch == "M") { return 77; }
+    if (ch == "N") { return 78; }  if (ch == "O") { return 79; }
+    if (ch == "P") { return 80; }  if (ch == "Q") { return 81; }
+    if (ch == "R") { return 82; }  if (ch == "S") { return 83; }
+    if (ch == "T") { return 84; }  if (ch == "U") { return 85; }
+    if (ch == "V") { return 86; }  if (ch == "W") { return 87; }
+    if (ch == "X") { return 88; }  if (ch == "Y") { return 89; }
+    if (ch == "Z") { return 90; }
+    if (ch == "a") { return 97; }  if (ch == "b") { return 98; }
+    if (ch == "c") { return 99; }  if (ch == "d") { return 100; }
+    if (ch == "e") { return 101; } if (ch == "f") { return 102; }
+    if (ch == "g") { return 103; } if (ch == "h") { return 104; }
+    if (ch == "i") { return 105; } if (ch == "j") { return 106; }
+    if (ch == "k") { return 107; } if (ch == "l") { return 108; }
+    if (ch == "m") { return 109; } if (ch == "n") { return 110; }
+    if (ch == "o") { return 111; } if (ch == "p") { return 112; }
+    if (ch == "q") { return 113; } if (ch == "r") { return 114; }
+    if (ch == "s") { return 115; } if (ch == "t") { return 116; }
+    if (ch == "u") { return 117; } if (ch == "v") { return 118; }
+    if (ch == "w") { return 119; } if (ch == "x") { return 120; }
+    if (ch == "y") { return 121; } if (ch == "z") { return 122; }
+    return 0;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §10  Named palette (convenience shortcuts)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Print text in a named color, with automatic reset.
+export public func red(text)     { return colorize(FG_RED(),     text); }
+export public func green(text)   { return colorize(FG_GREEN(),   text); }
+export public func yellow(text)  { return colorize(FG_YELLOW(),  text); }
+export public func blue(text)    { return colorize(FG_BLUE(),    text); }
+export public func magenta(text) { return colorize(FG_MAGENTA(), text); }
+export public func cyan(text)    { return colorize(FG_CYAN(),    text); }
+export public func white(text)   { return colorize(FG_WHITE(),   text); }
+export public func gray(text)    { return colorize(FG_BRIGHT_BLACK(), text); }
+export public func bright_red(text)    { return colorize(FG_BRIGHT_RED(),     text); }
+export public func bright_green(text)  { return colorize(FG_BRIGHT_GREEN(),   text); }
+export public func bright_yellow(text) { return colorize(FG_BRIGHT_YELLOW(),  text); }
+export public func bright_blue(text)   { return colorize(FG_BRIGHT_BLUE(),    text); }
+export public func bright_cyan(text)   { return colorize(FG_BRIGHT_CYAN(),    text); }
+export public func bright_white(text)  { return colorize(FG_BRIGHT_WHITE(),   text); }
+
+-- Orange (256-color approximation)
+export public func orange(text)  { return fg256(202) + text + RESET(); }
+export public func pink(text)    { return fg256(205) + text + RESET(); }
+export public func purple(text)  { return fg256(93)  + text + RESET(); }
+export public func gold(text)    { return fg256(220) + text + RESET(); }
+export public func teal(text)    { return fg256(37)  + text + RESET(); }
+export public func lime(text)    { return fg256(118) + text + RESET(); }
+export public func sky(text)     { return fg256(39)  + text + RESET(); }
+export public func coral(text)   { return fg256(203) + text + RESET(); }
+export public func brown(text)   { return fg256(130) + text + RESET(); }
+export public func slate(text)   { return fg256(244) + text + RESET(); }
+
+-- Background palette
+export public func bg_red(text)     { return colorize(BG_RED(),     text); }
+export public func bg_green(text)   { return colorize(BG_GREEN(),   text); }
+export public func bg_yellow(text)  { return colorize(BG_YELLOW(),  text); }
+export public func bg_blue(text)    { return colorize(BG_BLUE(),    text); }
+export public func bg_cyan(text)    { return colorize(BG_CYAN(),    text); }
+export public func bg_white(text)   { return colorize(BG_WHITE(),   text); }
+
+-- Semantic names useful in CLI tools
+export public func success(text) { return bright_green(text); }
+export public func warning(text) { return bright_yellow(text); }
+export public func error_text(text)   { return bright_red(text); }
+export public func info(text)    { return bright_cyan(text); }
+export public func muted(text)   { return gray(text); }
+export public func highlight(text) { return colorize(BG_YELLOW() + FG_BLACK(), text); }
+export public func code_text(text) { return colorize(fg256(250) + bg256(236), text); }

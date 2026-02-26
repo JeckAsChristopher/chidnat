@@ -1,0 +1,7 @@
+name: "test"
+description: "A test source code — example CHN library package"
+version: 1.0.0
+license: MIT
+launch: main/test.chn
+dependencies: [] -- just empty if dependencies not required
+keywords: test tool firstlaunch official

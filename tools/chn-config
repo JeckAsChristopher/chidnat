@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+#  chn-config — configure the CHN toolchain (GitHub token, registry repo)
+#
+#  Usage:  chn-config            interactive setup wizard
+#          chn-config --show     print current config
+#          chn-config --reset    clear all config
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
+CONFIG_VERSION="1.0.0"
+
+case "${1:-}" in
+    --show)
+        step "Current CHN configuration"
+        if [[ ! -f "$CHN_CONFIG" ]]; then
+            warn "No config found at $CHN_CONFIG"
+        else
+            while IFS='=' read -r k v; do
+                [[ "$k" =~ ^#.*$ ]] && continue
+                [[ -z "$k" ]] && continue
+                # mask token
+                if [[ "$k" == "GITHUB_TOKEN" ]]; then
+                    v="${v:0:8}••••••••••••••••"
+                fi
+                label "$k" "$v"
+            done < "$CHN_CONFIG"
+        fi
+        exit 0
+        ;;
+    --reset)
+        step "Resetting CHN configuration"
+        if [[ -f "$CHN_CONFIG" ]]; then
+            rm -f "$CHN_CONFIG"
+            ok "Config removed: $CHN_CONFIG"
+        else
+            warn "No config file found"
+        fi
+        exit 0
+        ;;
+    --help|-h)
+        cat <<HELP
+
+  ${BOLD}chn-config${RESET} — Configure the CHN toolchain
+
+  ${FG_CYAN}Usage:${RESET}
+    chn-config          Interactive setup wizard
+    chn-config --show   Print current config (token masked)
+    chn-config --reset  Clear all configuration
+
+  ${FG_CYAN}Config stored at:${RESET}  ~/.chn/config
+
+HELP
+        exit 0
+        ;;
+esac
+
+printf "\n"
+printf "  ${FG_BRIGHT_WHITE}${BOLD}⬡  chn-config${RESET}  ${FG_GRAY}v${CONFIG_VERSION}${RESET}\n"
+printf "  ${FG_GRAY}Configure the CHN package toolchain${RESET}\n\n"
+
+mkdir -p "$CHN_HOME"
+load_chn_config || true
+
+step "GitHub Registry Setup"
+printf "  ${FG_GRAY}Your packages are stored in a GitHub repo that jsDelivr serves as a CDN.${RESET}\n"
+printf "  ${FG_GRAY}Format: username/repo-name  (e.g. jeck/chn-registry)${RESET}\n\n"
+
+printf "  ${FG_CYAN}Registry repo${RESET} ${FG_GRAY}[${REGISTRY_REPO:-}]${RESET}: "
+read -r INPUT_REPO
+[[ -z "$INPUT_REPO" && -n "${REGISTRY_REPO:-}" ]] && INPUT_REPO="${REGISTRY_REPO}"
+[[ -z "$INPUT_REPO" ]] && die "Registry repo is required. Create one at https://github.com/new"
+save_config_key "REGISTRY_REPO" "$INPUT_REPO"
+
+printf "\n"
+step "GitHub Personal Access Token"
+printf "  ${FG_GRAY}Required for publishing packages (read-only for installing).${RESET}\n"
+printf "  ${FG_GRAY}Create one at: https://github.com/settings/tokens/new${RESET}\n"
+printf "  ${FG_GRAY}Scopes needed: repo (full control of private repositories)${RESET}\n\n"
+
+printf "  ${FG_CYAN}GitHub token${RESET}: "
+read -rs INPUT_TOKEN
+printf "\n"
+[[ -z "$INPUT_TOKEN" ]] && die "Token is required for publishing"
+save_config_key "GITHUB_TOKEN" "$INPUT_TOKEN"
+
+printf "\n"
+step "Author defaults (used when publishing)"
+printf "  ${FG_GRAY}These are saved so you don't have to type them every time.${RESET}\n\n"
+
+printf "  ${FG_CYAN}Your full name${RESET} ${FG_GRAY}[${AUTHOR_NAME:-}]${RESET}: "
+read -r INPUT_NAME
+[[ -z "$INPUT_NAME" && -n "${AUTHOR_NAME:-}" ]] && INPUT_NAME="${AUTHOR_NAME}"
+[[ -n "$INPUT_NAME" ]] && save_config_key "AUTHOR_NAME" "$INPUT_NAME"
+
+printf "  ${FG_CYAN}Your email${RESET} ${FG_GRAY}[${AUTHOR_EMAIL:-}]${RESET}: "
+read -r INPUT_EMAIL
+[[ -z "$INPUT_EMAIL" && -n "${AUTHOR_EMAIL:-}" ]] && INPUT_EMAIL="${AUTHOR_EMAIL}"
+[[ -n "$INPUT_EMAIL" ]] && save_config_key "AUTHOR_EMAIL" "$INPUT_EMAIL"
+
+printf "\n"
+step "Testing connection"
+REGISTRY_REPO="$INPUT_REPO"
+GITHUB_TOKEN="$INPUT_TOKEN"
+
+if check_github_api; then
+    ok "GitHub API authenticated successfully"
+else
+    warn "GitHub token check failed — verify the token has 'repo' scope"
+fi
+
+if check_cdn; then
+    ok "jsDelivr CDN is reachable"
+else
+    warn "CDN unreachable — check your internet connection"
+fi
+
+printf "\n"
+ok "Configuration saved to: $CHN_CONFIG"
+printf "\n"
+printf "  You can now run:\n"
+printf "    ${FG_CYAN}chn-publish${RESET}        — publish a package\n"
+printf "    ${FG_CYAN}chn-install <name>${RESET}  — install a package\n\n"

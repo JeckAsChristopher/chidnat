@@ -1,0 +1,434 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+#  chn-install — download and install CHN packages from the registry
+#
+#  Usage:  chn-install <package>           install latest version
+#          chn-install <package>@<version> install specific version
+#          chn-install --list              list all available packages
+#          chn-install --info <package>    show package info
+#          chn-install --remove <package>  uninstall a package
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+INSTALL_VERSION="1.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
+# ── CLI parsing ────────────────────────────────────────────────────────────────
+MODE="install"
+PKG_ARG=""
+FORCE=0
+
+if [[ $# -eq 0 ]]; then
+    err "No package specified"
+    printf "  Usage: chn-install <package>  or  chn-install --help\n"
+    exit 1
+fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --list)          MODE="list" ;;
+        --info)          MODE="info" ;;
+        --remove)        MODE="remove" ;;
+        --force|-f)      FORCE=1 ;;
+        --version)       echo "chn-install ${INSTALL_VERSION}"; exit 0 ;;
+        --help|-h)
+            cat <<HELP
+
+  ${BOLD}chn-install${RESET} — Install CHN packages from the registry
+
+  ${FG_CYAN}Usage:${RESET}
+    chn-install <package>            Install latest version
+    chn-install <package>@<version>  Install specific version
+    chn-install --list               List all available packages
+    chn-install --info <package>     Show package details
+    chn-install --remove <package>   Uninstall a package
+    chn-install --force <package>    Force reinstall even if up to date
+
+  ${FG_CYAN}Examples:${RESET}
+    chn-install test
+    chn-install mathlib@2.1.0
+    chn-install --info test
+    chn-install --list
+
+HELP
+            exit 0
+            ;;
+        --*)
+            err "Unknown option: $arg"
+            exit 1
+            ;;
+        *)
+            PKG_ARG="$arg"
+            ;;
+    esac
+done
+
+# ── Banner ─────────────────────────────────────────────────────────────────────
+printf "\n"
+printf "  ${FG_BRIGHT_WHITE}${BOLD}⬡  chn-install${RESET}  ${FG_GRAY}v${INSTALL_VERSION}${RESET}\n\n"
+
+# ── Load config ────────────────────────────────────────────────────────────────
+load_chn_config || true
+
+if [[ -z "${REGISTRY_REPO:-}" ]]; then
+    warn "Registry not configured. Run 'chn-config' first."
+    printf "  Or set: ${FG_CYAN}export REGISTRY_REPO=username/chn-registry${RESET}\n\n"
+    die "Registry not configured"
+fi
+
+CDN_BASE="${REGISTRY_BASE_URL}/${REGISTRY_REPO}@main"
+
+# ── Detect chn-libs install directory ─────────────────────────────────────────
+CHN_LIBS_DIR="$(find_chn_libs "$(pwd)")"
+if [[ -z "$CHN_LIBS_DIR" ]]; then
+    # Create in current directory as fallback
+    CHN_LIBS_DIR="$(pwd)/chn-libs"
+    mkdir -p "$CHN_LIBS_DIR"
+    warn "chn-libs not found — installing to: $CHN_LIBS_DIR"
+else
+    dim "Install target: $CHN_LIBS_DIR"
+fi
+
+# ── Fetch registry ─────────────────────────────────────────────────────────────
+fetch_registry_cached() {
+    mkdir -p "$CHN_CACHE"
+    local cache_file="${CHN_CACHE}/registry.json"
+    local cache_age=0
+
+    if [[ -f "$cache_file" ]]; then
+        cache_age=$(( $(date +%s) - $(date -r "$cache_file" +%s 2>/dev/null || echo 0) ))
+    fi
+
+    # Refresh cache if older than 5 minutes or missing
+    if [[ ! -f "$cache_file" || $cache_age -gt 300 ]]; then
+        local fresh
+        fresh="$(fetch_registry 2>/dev/null || echo "")"
+        if [[ -n "$fresh" ]]; then
+            echo "$fresh" > "$cache_file"
+        fi
+    fi
+
+    [[ -f "$cache_file" ]] && cat "$cache_file" || echo "{}"
+}
+
+# ── Lookup a package in the registry ──────────────────────────────────────────
+registry_lookup() {
+    local name="$1"
+    local registry="$2"
+    python3 -c "
+import json, sys
+try:
+    reg = json.loads('''${registry}''')
+    pkgs = reg.get('packages', {})
+    pkg = pkgs.get('${name}')
+    if pkg:
+        print(json.dumps(pkg))
+    else:
+        print('')
+except Exception as e:
+    print('')
+"
+}
+
+# ── MODE: list ─────────────────────────────────────────────────────────────────
+if [[ "$MODE" == "list" ]]; then
+    step "Available packages"
+    info "Checking CDN..."
+    REGISTRY="$(fetch_registry_cached)"
+
+    python3 -c "
+import json
+try:
+    reg = json.loads('''${REGISTRY}''')
+    pkgs = reg.get('packages', {})
+    if not pkgs:
+        print('  No packages in registry yet.')
+    else:
+        print(f'  {\033[90m}Found {len(pkgs)} package(s){\033[0m}')
+        print()
+        for name, info in sorted(pkgs.items()):
+            ver = info.get('latest', '?')
+            desc = info.get('description', '')[:55]
+            print(f'  \033[96m{name:<20}\033[0m \033[93mv{ver:<10}\033[0m {desc}')
+        print()
+except Exception as e:
+    print('  Failed to load registry:', e)
+"
+    exit 0
+fi
+
+# ── MODE: info ─────────────────────────────────────────────────────────────────
+if [[ "$MODE" == "info" ]]; then
+    [[ -z "$PKG_ARG" ]] && die "--info requires a package name"
+    step "Package info: $PKG_ARG"
+    info "Checking CDN..."
+    REGISTRY="$(fetch_registry_cached)"
+    PKG_INFO="$(registry_lookup "$PKG_ARG" "$REGISTRY")"
+    if [[ -z "$PKG_INFO" ]]; then
+        die "Package '$PKG_ARG' not found in registry"
+    fi
+    python3 -c "
+import json
+info = json.loads('${PKG_INFO}')
+print(f'  \033[1m{info.get(\"name\", \"-\")}\033[0m')
+print(f'  \033[90mDescription:\033[0m  {info.get(\"description\", \"-\")}')
+print(f'  \033[90mLatest:     \033[0m  v{info.get(\"latest\", \"-\")}')
+print(f'  \033[90mVersions:   \033[0m  {\" \".join(info.get(\"versions\", []))}')
+print(f'  \033[90mLicense:    \033[0m  {info.get(\"license\", \"-\")}')
+print(f'  \033[90mKeywords:   \033[0m  {\" \".join(info.get(\"keywords\", []))}')
+print(f'  \033[90mPublished:  \033[0m  {info.get(\"published_at\", \"-\")} by {info.get(\"published_by\", \"-\")}')
+"
+    exit 0
+fi
+
+# ── MODE: remove ──────────────────────────────────────────────────────────────
+if [[ "$MODE" == "remove" ]]; then
+    [[ -z "$PKG_ARG" ]] && die "--remove requires a package name"
+    TARGET="${CHN_LIBS_DIR}/${PKG_ARG}.chn"
+    if [[ ! -f "$TARGET" ]]; then
+        warn "Package '$PKG_ARG' is not installed (${TARGET} not found)"
+        exit 0
+    fi
+    rm -f "$TARGET"
+    ok "Removed: $PKG_ARG"
+    exit 0
+fi
+
+# ── MODE: install ──────────────────────────────────────────────────────────────
+
+# Parse package@version syntax
+REQ_NAME="${PKG_ARG%%@*}"
+REQ_VERSION=""
+if [[ "$PKG_ARG" == *"@"* ]]; then
+    REQ_VERSION="${PKG_ARG#*@}"
+fi
+
+# Validate package name
+if ! [[ "$REQ_NAME" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+    die "Invalid package name: '$REQ_NAME' — must be lowercase alphanumeric"
+fi
+
+# ── Step 1: Check CDN ──────────────────────────────────────────────────────────
+printf "  ${FG_GRAY}Checking CDN...${RESET}\n"
+if check_cdn; then
+    printf "  ${FG_GRAY}CDN active${RESET}\n"
+else
+    die "CDN unreachable. Check your internet connection."
+fi
+
+# ── Step 2: Find package in registry ──────────────────────────────────────────
+printf "  ${FG_GRAY}Finding %s in cdn...${RESET}\n" "$REQ_NAME"
+
+REGISTRY="$(fetch_registry_cached)"
+PKG_INFO="$(registry_lookup "$REQ_NAME" "$REGISTRY")"
+
+if [[ -z "$PKG_INFO" ]]; then
+    printf "\n"
+    err "Package '$REQ_NAME' not found in registry"
+    printf "  Run ${FG_CYAN}chn-install --list${RESET} to see available packages\n\n"
+    exit 1
+fi
+
+printf "  ${FG_GRAY}%s found!${RESET}\n" "$REQ_NAME"
+printf "  ${FG_GRAY}start downloading...${RESET}\n"
+printf "\n"
+
+# Extract version to install
+if [[ -z "$REQ_VERSION" ]]; then
+    REQ_VERSION="$(python3 -c "import json; print(json.loads('${PKG_INFO}').get('latest',''))")"
+fi
+
+if [[ -z "$REQ_VERSION" ]]; then
+    die "Could not determine version for package '$REQ_NAME'"
+fi
+
+# ── Main install function (called recursively for deps) ────────────────────────
+INSTALLED_PKGS=()   # track installed to avoid circular deps
+
+install_package() {
+    local pkg_name="$1"
+    local pkg_version="$2"
+    local indent="${3:-}"
+
+    # Avoid reinstalling within this session
+    for already in "${INSTALLED_PKGS[@]:-}"; do
+        [[ "$already" == "$pkg_name" ]] && return 0
+    done
+
+    local pkg_dir="${CDN_BASE}/packages/${pkg_name}/${pkg_version}"
+    local manifest_url="${pkg_dir}/manifest.json"
+
+    # ── Download manifest ──────────────────────────────────────────────────────
+    printf "${indent}  ${FG_BRIGHT_WHITE}${BOLD}Starting downloading %s${RESET}\n" "${pkg_name}@${pkg_version}"
+
+    local manifest
+    manifest="$(curl -sf --max-time 15 "$manifest_url" 2>/dev/null || echo "")"
+    if [[ -z "$manifest" ]]; then
+        err "Failed to download manifest for ${pkg_name}@${pkg_version}"
+        err "URL: $manifest_url"
+        return 1
+    fi
+
+    # Parse file list from manifest
+    local FILES
+    mapfile -t FILES < <(python3 -c "
+import json
+m = json.loads('''${manifest}''')
+for f in m.get('files', []):
+    print(f)
+")
+
+    local TOTAL="${#FILES[@]}"
+    local COUNT=0
+    local TEMP_DIR
+    TEMP_DIR="$(mktemp -d)"
+    trap "rm -rf '$TEMP_DIR'" EXIT
+
+    # ── Download files ─────────────────────────────────────────────────────────
+    for f in "${FILES[@]}"; do
+        ((COUNT++))
+        progress_bar $COUNT $TOTAL "${pkg_name}: $f"
+
+        local file_url="${pkg_dir}/${f}"
+        local dest="${TEMP_DIR}/${f}"
+        mkdir -p "$(dirname "$dest")"
+
+        if ! curl -sf --max-time 30 "$file_url" -o "$dest" 2>/dev/null; then
+            printf "\n"
+            warn "Could not download: $f (skipping)"
+        fi
+        sleep 0.02
+    done
+    progress_done "Downloaded ${pkg_name}@${pkg_version}"
+
+    printf "\n"
+    ok "${indent}Successfully downloaded ${pkg_name}!"
+
+    # ── Build configuration ────────────────────────────────────────────────────
+    info "${indent}Building configuration on ${pkg_name}"
+
+    local conf_file="${TEMP_DIR}/CHN-CONF"
+    if [[ ! -f "$conf_file" ]]; then
+        err "CHN-CONF missing from package ${pkg_name}"
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    parse_chn_conf "$conf_file"
+    validate_chn_conf > /dev/null
+    local CONF_ERR=$?
+    if [[ $CONF_ERR -gt 0 ]]; then
+        err "Package ${pkg_name} has invalid CHN-CONF — publisher error"
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    ok "${indent}Built configuration on ${pkg_name}!"
+
+    # ── Install dependencies first ─────────────────────────────────────────────
+    if [[ ${#PKG_DEPS[@]} -gt 0 ]]; then
+        printf "\n"
+        info "${indent}Resolving ${#PKG_DEPS[@]} dependencies for ${pkg_name}..."
+        for dep in "${PKG_DEPS[@]}"; do
+            # check if already installed in chn-libs
+            if [[ -f "${CHN_LIBS_DIR}/${dep}.chn" && $FORCE -eq 0 ]]; then
+                dim "${indent}  Dependency '${dep}' already installed"
+                continue
+            fi
+            # look up in registry
+            local dep_info
+            dep_info="$(registry_lookup "$dep" "$REGISTRY")"
+            if [[ -z "$dep_info" ]]; then
+                warn "Dependency '${dep}' not found in registry — skipping"
+                continue
+            fi
+            local dep_ver
+            dep_ver="$(python3 -c "import json; print(json.loads('${dep_info}').get('latest',''))")"
+            printf "\n"
+            info "${indent}  Installing dependency: ${dep}@${dep_ver}"
+            install_package "$dep" "$dep_ver" "${indent}  "
+            printf "\n"
+        done
+    fi
+
+    # ── Install the package ────────────────────────────────────────────────────
+    info "${indent}Installing ${pkg_name}"
+
+    # The library file is the launch file — copy it to chn-libs as pkg_name.chn
+    local launch_src="${TEMP_DIR}/${PKG_LAUNCH}"
+
+    if [[ ! -f "$launch_src" ]]; then
+        err "Launch file not found in downloaded package: $PKG_LAUNCH"
+        rm -rf "$TEMP_DIR"
+        return 1
+    fi
+
+    # Verify it still parses
+    if command -v chn &>/dev/null; then
+        if ! chn --ast "$launch_src" &>/dev/null; then
+            err "Downloaded package has syntax errors in: $PKG_LAUNCH"
+            rm -rf "$TEMP_DIR"
+            return 1
+        fi
+    fi
+
+    # Copy to chn-libs
+    local install_dest="${CHN_LIBS_DIR}/${pkg_name}.chn"
+    cp "$launch_src" "$install_dest"
+
+    # Also copy any other .chn files (sub-modules) if the launch is in a subdirectory
+    local launch_dir
+    launch_dir="$(dirname "$PKG_LAUNCH")"
+    if [[ "$launch_dir" != "." ]]; then
+        # Copy the whole sub-directory alongside the main file as pkg_name/ 
+        local subdir_dest="${CHN_LIBS_DIR}/${pkg_name}"
+        mkdir -p "$subdir_dest"
+        find "${TEMP_DIR}/${launch_dir}" -name "*.chn" | while read -r src_chn; do
+            local rel_to_launch="${src_chn#${TEMP_DIR}/${launch_dir}/}"
+            local dst="${subdir_dest}/${rel_to_launch}"
+            mkdir -p "$(dirname "$dst")"
+            cp "$src_chn" "$dst"
+        done
+    fi
+
+    # Write installed version record
+    mkdir -p "${CHN_HOME}/installed"
+    python3 -c "
+import json
+info = {
+    'name': '${pkg_name}',
+    'version': '${pkg_version}',
+    'installed_at': '$(date +%Y-%m-%d)',
+    'launch': '${PKG_LAUNCH}',
+    'license': '${PKG_LICENSE}'
+}
+with open('${CHN_HOME}/installed/${pkg_name}.json', 'w') as f:
+    json.dump(info, f, indent=2)
+"
+
+    ok "${indent}Successfully installed ${pkg_name}!"
+    INSTALLED_PKGS+=("$pkg_name")
+
+    rm -rf "$TEMP_DIR"
+    trap - EXIT
+}
+
+# ── Run install ────────────────────────────────────────────────────────────────
+
+# Check if already installed at same version
+INSTALLED_RECORD="${CHN_HOME}/installed/${REQ_NAME}.json"
+if [[ -f "$INSTALLED_RECORD" && $FORCE -eq 0 ]]; then
+    INSTALLED_VER="$(python3 -c "import json; print(json.load(open('${INSTALLED_RECORD}')).get('version',''))")"
+    if [[ "$INSTALLED_VER" == "$REQ_VERSION" ]]; then
+        ok "${REQ_NAME}@${REQ_VERSION} is already installed"
+        printf "  Use ${FG_CYAN}chn-install --force ${REQ_NAME}${RESET} to reinstall\n\n"
+        exit 0
+    fi
+fi
+
+install_package "$REQ_NAME" "$REQ_VERSION"
+
+printf "\n"
+printf "  ${FG_BRIGHT_GREEN}${BOLD}✓${RESET}  Done! Use it with:\n\n"
+printf "    ${FG_CYAN}imp %s${RESET}\n\n" "$REQ_NAME"

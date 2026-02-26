@@ -1,0 +1,42 @@
+-- mathlib.chn — a reusable math library
+-- Demonstrates public / private / protected + export
+
+-- PUBLIC: exported, callable from anywhere
+public func abs_val(n) {
+    if (n < 0) { return -n; }
+    return n;
+}
+
+public func power(base, exp) {
+    var result = 1;
+    var i = 0;
+    while (i < exp) {
+        result = result * base;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- PRIVATE: helper — NOT exported, stays in this file only
+private func is_negative(n) {
+    return n < 0;
+}
+
+-- PROTECTED: accessible to this file + files that import it
+protected func clamp(value, lo, hi) {
+    if (value < lo) { return lo; }
+    if (value > hi) { return hi; }
+    return value;
+}
+
+public func normalize(value, lo, hi) {
+    -- uses the private helper internally
+    var v = clamp(value, lo, hi);
+    return v;
+}
+
+-- Only public and protected functions can be exported
+export abs_val;
+export power;
+export clamp;
+export normalize;

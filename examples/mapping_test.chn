@@ -1,0 +1,116 @@
+-- mapping_test.chn — exercises the map.chn library
+-- Run: ./chn examples/mapping_test.chn
+
+imp map
+
+stdo("=== mapping_test.chn ===")
+stdo("")
+
+-- § Basic operations ───────────────────────────────────────────────────────────
+stdo("--- Basic set/get/has ---")
+var m = map_new()
+map_set(m, "name",  "Alice")
+map_set(m, "age",   "30")
+map_set(m, "score", "99")
+stdo("name:",  map_get(m, "name"))
+stdo("age:",   map_get(m, "age"))
+stdo("has name:", map_has(m, "name"))
+stdo("has nope:", map_has(m, "nope"))
+stdo("size:", map_size(m))
+
+-- § get_or default ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- get_or ---")
+stdo("existing:", map_get_or(m, "name", "unknown"))
+stdo("missing:",  map_get_or(m, "missing", "default_val"))
+
+-- § Delete ─────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- delete ---")
+map_delete(m, "score")
+stdo("size after delete:", map_size(m))
+stdo("score still there:", map_has(m, "score"))
+
+-- § Keys / values ──────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- keys/values ---")
+var m2 = map_new()
+map_set(m2, "a", "1")
+map_set(m2, "b", "2")
+map_set(m2, "c", "3")
+var ks = map_keys(m2)
+var vs = map_values(m2)
+stdo("key count:", ks.length())
+stdo("val count:", vs.length())
+
+-- § Increment ──────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- inc/inc_by ---")
+var counts = map_new()
+map_inc(counts, "apples")
+map_inc(counts, "apples")
+map_inc(counts, "apples")
+map_inc(counts, "bananas")
+map_inc_by(counts, "bananas", 5)
+stdo("apples:", map_get(counts, "apples"))
+stdo("bananas:", map_get(counts, "bananas"))
+
+-- § Merge and copy ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- merge/copy ---")
+var base = map_new()
+map_set(base, "x", "1")
+map_set(base, "y", "2")
+var extra = map_new()
+map_set(extra, "y", "99")
+map_set(extra, "z", "3")
+map_merge(base, extra)
+stdo("after merge x:", map_get(base, "x"))
+stdo("after merge y:", map_get(base, "y"))
+stdo("after merge z:", map_get(base, "z"))
+
+var copy = map_copy(base)
+map_set(copy, "x", "mutated")
+stdo("original x still:", map_get(base, "x"))
+stdo("copy x:", map_get(copy, "x"))
+
+-- § Frequency counter ──────────────────────────────────────────────────────────
+stdo("")
+stdo("--- map_freq ---")
+array words = []
+words.add("cat")
+words.add("dog")
+words.add("cat")
+words.add("bird")
+words.add("cat")
+words.add("dog")
+var freq = map_freq(words)
+stdo("cat:", map_get(freq, "cat"))
+stdo("dog:", map_get(freq, "dog"))
+stdo("bird:", map_get(freq, "bird"))
+
+-- § Max / min key ──────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- max_key / min_key ---")
+stdo("max key:", map_max_key(freq))
+stdo("min key:", map_min_key(freq))
+
+-- § is_empty and clear ─────────────────────────────────────────────────────────
+stdo("")
+stdo("--- is_empty / clear ---")
+var empty_map = map_new()
+stdo("is empty:", map_is_empty(empty_map))
+stdo("is empty (non-empty):", map_is_empty(freq))
+map_clear(freq)
+stdo("after clear, is empty:", map_is_empty(freq))
+
+-- § to_str ─────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- to_str ---")
+var sm = map_new()
+map_set(sm, "lang", "CHN")
+map_set(sm, "v",    "1.0")
+stdo(map_to_str(sm))
+
+stdo("")
+stdo("=== mapping_test PASSED ===")

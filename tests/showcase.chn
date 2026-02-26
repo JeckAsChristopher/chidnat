@@ -1,0 +1,44 @@
+-- CHN Language Showcase
+-- ======================
+
+-- 1. Basic output
+stdo("=== CHN Language Demo ===");
+
+-- 2. Immutable let binding
+let greeting = "Hello";
+let target   = "World";
+stdo(greeting + ", " + target + "!");
+
+-- 3. Mutable var + arithmetic
+var counter = 0;
+var step    = 5;
+var result  = counter + step * 2;   -- respects precedence
+stdo("Result:", result);
+
+-- 4. While loop: FizzBuzz-lite
+var i = 1;
+while (i <= 10) {
+    if (i == 3) {
+        stdo("Fizz");
+    } else if (i == 5) {
+        stdo("Buzz");
+    } else if (i == 9) {
+        stdo("Fizz");
+    } else if (i == 10) {
+        stdo("Buzz");
+    } else {
+        stdo(i);
+    }
+    i = i + 1;
+}
+
+-- 5. Boolean logic
+var x = 42;
+stdo("x > 10 && x < 100:", x > 10);
+stdo("x == 42:", x == 42);
+stdo("x != 0:", x != 0);
+
+-- 6. String operations
+let lang = "chn";
+stdo("Language: " + lang);
+stdo("Version: " + "0.1.0");

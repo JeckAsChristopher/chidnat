@@ -1,0 +1,64 @@
+-- ============================================================
+--  Array Tests
+-- ============================================================
+stdo("=== Array Basics ===");
+
+-- Declaration with literal
+array x = [2, 5, 1, 9, 6, 6];
+stdo("initial:", x);
+
+-- .add(value) → push to end
+x.add(7);
+stdo("after add(7):", x);
+
+-- .cut(index) → remove by index
+x.cut(2);
+stdo("after cut(2):", x);
+
+-- .rall(value) → remove ALL occurrences of 6
+x.rall(6);
+stdo("after rall(6):", x);
+
+-- .insert(index, value)
+x.insert(1, 99);
+stdo("after insert(1, 99):", x);
+
+-- .remove(value) → remove first occurrence
+x.add(5);
+x.add(5);
+stdo("before remove(5):", x);
+x.remove(5);
+stdo("after remove(5) once:", x);
+
+-- .length()
+stdo("length:", x.length());
+
+-- Direct index access
+stdo("x[0] =", x[0]);
+stdo("x[1] =", x[1]);
+
+stdo("");
+stdo("=== Array in for loop ===");
+array nums = [10, 20, 30, 40, 50];
+var total = 0;
+for (var i = 0; i < nums.length(); i = i + 1) {
+    total = total + nums[i];
+}
+stdo("sum of nums:", total);
+
+stdo("");
+stdo("=== Nested array ops ===");
+array evens = [];
+for (var i = 0; i <= 10; i = i + 1) {
+    if (i % 2 == 0) {
+        evens.add(i);
+    }
+}
+stdo("evens:", evens);
+stdo("count:", evens.length());
+
+stdo("");
+stdo("=== Mixed types in array ===");
+array mixed = [1, "hello", true, nil, 3.14];
+stdo("mixed:", mixed);
+stdo("mixed[1]:", mixed[1]);

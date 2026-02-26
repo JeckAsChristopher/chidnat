@@ -1,0 +1,5 @@
+private func secret() {
+    return 42;
+}
+-- Cannot export a private function
+export secret;

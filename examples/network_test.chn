@@ -1,0 +1,184 @@
+-- network_test.chn — exercises the network.chn library
+-- Run: ./chn examples/network_test.chn
+--
+-- This test spins up its own echo/HTTP server on localhost so it has no
+-- external dependencies — everything is self-contained.
+
+imp os
+imp network
+
+stdo("=== network_test.chn ===")
+stdo("")
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § URL / query string helpers  (pure functions, no I/O needed)
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("--- URL helpers ---")
+stdo("url_encode:", net_url_encode("hello world & more"))
+stdo("url_decode:", net_url_decode("hello+world+%26+more"))
+
+var ks = ["name", "score", "active"]
+array vs = []
+vs.add("Alice Wonder")
+vs.add("99")
+vs.add("true")
+stdo("build_query:", net_build_query(ks, vs))
+
+var qs = "name=Alice+Wonder&score=99&active=true"
+var parsed = net_parse_query(qs)
+stdo("parse_query keys:", parsed[0])
+stdo("parse_query vals:", parsed[1])
+
+-- path helpers
+var path = "/api/v1/users?limit=10&offset=0"
+stdo("query_string:", net_query_string(path))
+stdo("path_segments:", net_path_segments("/api/v1/users"))
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § HTTP response builders  (pure functions)
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- HTTP response builders ---")
+var r200 = net_resp_html("<h1>Hello</h1>")
+stdo("resp_html starts with HTTP:", r200[0] == "H")
+stdo("resp_html contains 200:", r200[9] == "2")
+
+var rjson = net_resp_json("{\"ok\":true}")
+stdo("resp_json content-type:", rjson[0] == "H")
+
+var r404 = net_resp_404("/missing")
+stdo("resp_404 starts with HTTP:", r404[0] == "H")
+stdo("resp_404 status digit:", r404[9] == "4")
+
+var r500 = net_resp_500("internal")
+stdo("resp_500 status digit:", r500[9] == "5")
+
+var redir = net_resp_redirect("/new/location")
+stdo("redirect contains Location:", redir[9] == "3")
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § HTTP request parser  (pure function — parse a raw request string)
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- HTTP request parser ---")
+var raw = "GET /api/hello?name=Bob HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\n\r\nbody text"
+var req = net_parse_request(raw)
+stdo("method:",  req[0])
+stdo("path:",    req[1])
+stdo("headers:", req[2].length(), "chars")
+stdo("body:",    req[3])
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § header_get helper
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- header_get ---")
+var hdrs = "Host: example.com\r\nContent-Type: application/json\r\nX-Token: abc123\r\n"
+stdo("Host:", net_header_get(hdrs, "Host"))
+stdo("Content-Type:", net_header_get(hdrs, "Content-Type"))
+stdo("X-Token:", net_header_get(hdrs, "X-Token"))
+stdo("Missing:", net_header_get(hdrs, "X-Missing"))
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § net_http_response builder
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- net_http_response ---")
+var custom = net_http_response(201, "application/json", "{\"created\":true}")
+stdo("custom 201 starts HTTP:", custom[0] == "H")
+stdo("custom 201 status '2':", custom[9] == "2")
+stdo("custom 201 status '0':", custom[10] == "0")
+stdo("custom 201 status '1':", custom[11] == "1")
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § TCP echo server + client  (loopback, no external network)
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- TCP echo (loopback) ---")
+
+var PORT_TCP = 19876
+var server = net_tcp_listen(PORT_TCP)
+stdo("server fd:", server)
+
+-- connect from client side
+var client = net_tcp_connect("127.0.0.1", PORT_TCP, 2000)
+stdo("client fd:", client)
+
+-- accept on server side (short timeout)
+var conn = net_tcp_accept(server, 500)
+stdo("connection accepted:", conn[0] >= 0)
+
+-- send a message client → server
+net_send(client, "hello from client")
+
+-- server receives
+var received = net_recv(conn[0], 1024, 500)
+stdo("server got:", received)
+
+-- echo back
+net_send(conn[0], "echo: " + received)
+
+-- client receives echo
+var echo = net_recv(client, 1024, 500)
+stdo("client got echo:", echo)
+
+-- cleanup
+net_close(client)
+net_close(conn[0])
+net_close(server)
+stdo("TCP echo test done")
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § HTTP step server  (serve one request then stop)
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- HTTP step server (one request) ---")
+
+var PORT_HTTP = 19877
+var hserver = net_tcp_listen(PORT_HTTP)
+
+-- Make a raw HTTP request to ourselves using TCP
+var hclient = net_tcp_connect("127.0.0.1", PORT_HTTP, 2000)
+net_send(hclient, "GET /ping HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+
+-- Accept and parse the request via net_http_step
+var hreq = net_http_step(hserver)
+if (hreq != nil) {
+    stdo("HTTP step method:", hreq[1])
+    stdo("HTTP step path:", hreq[2])
+    var response = net_resp_json("{\"pong\":true}")
+    net_send(hreq[0], response)
+    net_close(hreq[0])
+}
+
+-- get the response on the client side
+var hresp = net_recv(hclient, 4096, 1000)
+stdo("HTTP response received:", hresp.length(), "bytes")
+stdo("HTTP response ok:", hresp[9] == "2")
+
+net_close(hclient)
+net_close(hserver)
+stdo("HTTP step test done")
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § DNS resolution
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- DNS ---")
+var ip = net_dns("localhost")
+stdo("localhost resolves to:", ip)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- § WebSocket helpers  (pure functions)
+-- ─────────────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- WebSocket helpers ---")
+var accept_key = net_ws_accept_key("dGhlIHNhbXBsZSBub25jZQ==")
+stdo("ws accept key:", accept_key)
+var upgrade_resp = net_ws_upgrade_response(accept_key)
+stdo("ws upgrade resp length:", upgrade_resp.length())
+var frame = net_ws_frame("Hello WS")
+stdo("ws frame length:", frame.length())
+
+stdo("")
+stdo("=== network_test PASSED ===")

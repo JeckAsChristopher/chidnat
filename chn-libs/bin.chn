@@ -1,0 +1,1068 @@
+-- ╔══════════════════════════════════════════════════════════════════════╗
+-- ║  libbin.chn  —  Binary & Bitwise Operations Library                 ║
+-- ║                                                                      ║
+-- ║  Sections:                                                           ║
+-- ║    1.  Bitwise Ops    (AND, OR, XOR, NOT, SHL, SHR, ROTL, ROTR)    ║
+-- ║    2.  Bit Query      (popcount, CLZ, parity, bit_get, bit_set)     ║
+-- ║    3.  Byte Packing   (u8/u16/u32/u64 pack/unpack, big/little end) ║
+-- ║    4.  Representation (bin_str, hex_str, oct_str, from_bin/hex)     ║
+-- ║    5.  Byte Arrays    (alloc, fill, slice, copy, xor_bytes, cmp)    ║
+-- ║    6.  Checksums      (sum8, XOR checksum, CRC-8, CRC-16, Adler-32)║
+-- ║    7.  Hashing        (FNV-1a 32/64, DJB2, SDBM, simple hash)      ║
+-- ║    8.  Encoding       (Base64 encode/decode, hex encode/decode)     ║
+-- ║    9.  Binary Files   (read_bytes, write_bytes, write_multi)        ║
+-- ║   10.  Simple Formats (BMP header, WAV header, PNG-like, custom)    ║
+-- ║                                                                      ║
+-- ║  Usage:  imp "libbin"                                                ║
+-- ╚══════════════════════════════════════════════════════════════════════╝
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §1  BITWISE OPERATIONS
+-- All implemented using arithmetic since CHN has no native bitwise ops.
+-- Numbers are treated as 32-bit unsigned integers.
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Internal: normalize to 32-bit unsigned
+private func u32(x) {
+    x = x % 4294967296;
+    if (x < 0) { x = x + 4294967296; }
+    return x;
+}
+
+-- Bitwise AND of two 32-bit integers
+export public func bin_and(a, b) {
+    a = u32(a); b = u32(b);
+    var result = 0;
+    var bit = 1;
+    var i = 0;
+    while (i < 32) {
+        if ((a % 2 == 1) && (b % 2 == 1)) { result = result + bit; }
+        a = (a - a%2) / 2;
+        b = (b - b%2) / 2;
+        bit = bit * 2;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Bitwise OR of two 32-bit integers
+export public func bin_or(a, b) {
+    a = u32(a); b = u32(b);
+    var result = 0;
+    var bit = 1;
+    var i = 0;
+    while (i < 32) {
+        if ((a % 2 == 1) || (b % 2 == 1)) { result = result + bit; }
+        a = (a - a%2) / 2;
+        b = (b - b%2) / 2;
+        bit = bit * 2;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Bitwise XOR of two 32-bit integers
+export public func bin_xor(a, b) {
+    a = u32(a); b = u32(b);
+    var result = 0;
+    var bit = 1;
+    var i = 0;
+    while (i < 32) {
+        var da = a % 2;
+        var db = b % 2;
+        if ((da == 1 && db == 0) || (da == 0 && db == 1)) { result = result + bit; }
+        a = (a - da) / 2;
+        b = (b - db) / 2;
+        bit = bit * 2;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Bitwise NOT (32-bit): ~x = XOR with 0xFFFFFFFF
+export public func bin_not(a) {
+    return bin_xor(u32(a), 4294967295);
+}
+
+-- Left shift: a << n  (32-bit)
+export public func bin_shl(a, n) {
+    a = u32(a);
+    n = n % 32;
+    var i = 0;
+    while (i < n) { a = u32(a * 2); i = i + 1; }
+    return a;
+}
+
+-- Logical right shift: a >>> n  (zero-fill)
+export public func bin_shr(a, n) {
+    a = u32(a);
+    n = n % 32;
+    var i = 0;
+    while (i < n) {
+        a = (a - a%2) / 2;
+        i = i + 1;
+    }
+    return a;
+}
+
+-- Rotate left (32-bit)
+export public func bin_rotl(a, n) {
+    a = u32(a);
+    n = n % 32;
+    if (n == 0) { return a; }
+    return bin_or(bin_shl(a, n), bin_shr(a, 32 - n));
+}
+
+-- Rotate right (32-bit)
+export public func bin_rotr(a, n) {
+    a = u32(a);
+    n = n % 32;
+    if (n == 0) { return a; }
+    return bin_or(bin_shr(a, n), bin_shl(a, 32 - n));
+}
+
+-- Arithmetic right shift (preserves sign bit)
+export public func bin_sar(a, n) {
+    a = u32(a);
+    n = n % 32;
+    var sign = bin_shr(a, 31);
+    var result = bin_shr(a, n);
+    if (sign == 1) {
+        -- Fill upper bits with 1s
+        var mask = 0;
+        var i = 0;
+        while (i < n) {
+            mask = bin_or(mask, bin_shl(1, 31 - i));
+            i = i + 1;
+        }
+        result = bin_or(result, mask);
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §2  BIT QUERY
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Count of set bits (population count / Hamming weight)
+export public func bin_popcount(x) {
+    x = u32(x);
+    var count = 0;
+    while (x > 0) {
+        count = count + (x % 2);
+        x = (x - x%2) / 2;
+    }
+    return count;
+}
+
+-- Count leading zeros in a 32-bit value
+export public func bin_clz(x) {
+    x = u32(x);
+    if (x == 0) { return 32; }
+    var count = 0;
+    var i = 31;
+    while (i >= 0) {
+        if (bin_shr(x, i) % 2 == 1) { return count; }
+        count = count + 1;
+        i = i - 1;
+    }
+    return 32;
+}
+
+-- Count trailing zeros
+export public func bin_ctz(x) {
+    x = u32(x);
+    if (x == 0) { return 32; }
+    var count = 0;
+    while (x % 2 == 0) {
+        count = count + 1;
+        x = (x - x%2) / 2;
+    }
+    return count;
+}
+
+-- Parity: 1 if odd number of bits set, 0 if even
+export public func bin_parity(x) {
+    return bin_popcount(x) % 2;
+}
+
+-- Get bit n (0 = LSB)
+export public func bin_get(x, n) {
+    return bin_shr(u32(x), n) % 2;
+}
+
+-- Set bit n to 1
+export public func bin_set(x, n) {
+    return bin_or(u32(x), bin_shl(1, n));
+}
+
+-- Clear bit n to 0
+export public func bin_clear(x, n) {
+    return bin_and(u32(x), bin_not(bin_shl(1, n)));
+}
+
+-- Toggle bit n
+export public func bin_toggle(x, n) {
+    return bin_xor(u32(x), bin_shl(1, n));
+}
+
+-- Extract bits [lo..hi] inclusive
+export public func bin_extract(x, lo, hi) {
+    var width = hi - lo + 1;
+    var mask = bin_shl(1, width) - 1;
+    return bin_and(bin_shr(u32(x), lo), mask);
+}
+
+-- Deposit bits into position lo
+export public func bin_deposit(x, val, lo, hi) {
+    var width = hi - lo + 1;
+    var mask  = bin_shl(bin_shl(1, width) - 1, lo);
+    var cleared = bin_and(u32(x), bin_not(mask));
+    return bin_or(cleared, bin_shl(bin_and(val, bin_shl(1,width)-1), lo));
+}
+
+-- Is power of two?
+export public func bin_is_pow2(x) {
+    x = u32(x);
+    if (x == 0) { return false; }
+    return bin_and(x, x - 1) == 0;
+}
+
+-- Next power of two >= x
+export public func bin_next_pow2(x) {
+    x = u32(x);
+    if (x == 0) { return 1; }
+    x = x - 1;
+    x = bin_or(x, bin_shr(x, 1));
+    x = bin_or(x, bin_shr(x, 2));
+    x = bin_or(x, bin_shr(x, 4));
+    x = bin_or(x, bin_shr(x, 8));
+    x = bin_or(x, bin_shr(x, 16));
+    return x + 1;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §3  BYTE PACKING  (little-endian by default)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Pack a u8 into a 1-element byte array
+export public func bin_pack_u8(v) {
+    array b = [];
+    b.add(v % 256);
+    return b;
+}
+
+-- Pack a u16 little-endian into a 2-element byte array
+export public func bin_pack_u16_le(v) {
+    array b = [];
+    b.add(v % 256);
+    b.add(bin_shr(v, 8) % 256);
+    return b;
+}
+
+-- Pack a u16 big-endian
+export public func bin_pack_u16_be(v) {
+    array b = [];
+    b.add(bin_shr(v, 8) % 256);
+    b.add(v % 256);
+    return b;
+}
+
+-- Pack a u32 little-endian into a 4-element byte array
+export public func bin_pack_u32_le(v) {
+    array b = [];
+    b.add(v % 256);
+    b.add(bin_shr(v, 8)  % 256);
+    b.add(bin_shr(v, 16) % 256);
+    b.add(bin_shr(v, 24) % 256);
+    return b;
+}
+
+-- Pack a u32 big-endian
+export public func bin_pack_u32_be(v) {
+    array b = [];
+    b.add(bin_shr(v, 24) % 256);
+    b.add(bin_shr(v, 16) % 256);
+    b.add(bin_shr(v, 8)  % 256);
+    b.add(v % 256);
+    return b;
+}
+
+-- Unpack u16 little-endian from byte array at offset
+export public func bin_unpack_u16_le(arr, off) {
+    return arr[off] + bin_shl(arr[off+1], 8);
+}
+
+-- Unpack u32 little-endian from byte array at offset
+export public func bin_unpack_u32_le(arr, off) {
+    return arr[off] + bin_shl(arr[off+1],8) + bin_shl(arr[off+2],16) + bin_shl(arr[off+3],24);
+}
+
+-- Unpack u16 big-endian
+export public func bin_unpack_u16_be(arr, off) {
+    return bin_shl(arr[off], 8) + arr[off+1];
+}
+
+-- Unpack u32 big-endian
+export public func bin_unpack_u32_be(arr, off) {
+    return bin_shl(arr[off],24) + bin_shl(arr[off+1],16) + bin_shl(arr[off+2],8) + arr[off+3];
+}
+
+-- Append one byte array onto another (mutation-free, returns new array)
+export public func bin_concat(a, b) {
+    array result = [];
+    var i = 0;
+    while (i < a.length()) { result.add(a[i]); i = i + 1; }
+    i = 0;
+    while (i < b.length()) { result.add(b[i]); i = i + 1; }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §4  REPRESENTATION
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Digits for base conversion
+private func _digits() { return "0123456789abcdef"; }
+
+-- Convert integer to binary string "0b10110..."
+export public func bin_to_str(x) {
+    x = u32(x);
+    if (x == 0) { return "0b0"; }
+    var result = "";
+    var n = x;
+    while (n > 0) {
+        result = "" + (n % 2) + result;
+        n = (n - n%2) / 2;
+    }
+    return "0b" + result;
+}
+
+-- Convert integer to hex string "0x1a2f"
+export public func bin_to_hex(x) {
+    x = u32(x);
+    if (x == 0) { return "0x0"; }
+    var digs = _digits();
+    var result = "";
+    var n = x;
+    while (n > 0) {
+        var rem = n % 16;
+        result = digs[rem] + result;
+        n = (n - rem) / 16;
+    }
+    return "0x" + result;
+}
+
+-- Convert integer to octal string "0o17"
+export public func bin_to_oct(x) {
+    x = u32(x);
+    if (x == 0) { return "0o0"; }
+    var result = "";
+    var n = x;
+    while (n > 0) {
+        result = "" + (n % 8) + result;
+        n = (n - n%8) / 8;
+    }
+    return "0o" + result;
+}
+
+-- Parse a binary string "0b1010" → integer
+export public func bin_from_str(s) {
+    var i = 0;
+    if (s[0] == "0" && s.length() > 1 && s[1] == "b") { i = 2; }
+    var result = 0;
+    while (i < s.length()) {
+        result = result * 2;
+        if (s[i] == "1") { result = result + 1; }
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Parse a hex string "0xff" or "ff" → integer
+export public func bin_from_hex(s) {
+    var i = 0;
+    if (s.length() > 1 && s[0] == "0" && s[1] == "x") { i = 2; }
+    var result = 0;
+    while (i < s.length()) {
+        var ch = s[i];
+        var digit = 0;
+        if (ch == "0") { digit = 0; }
+        if (ch == "1") { digit = 1; }
+        if (ch == "2") { digit = 2; }
+        if (ch == "3") { digit = 3; }
+        if (ch == "4") { digit = 4; }
+        if (ch == "5") { digit = 5; }
+        if (ch == "6") { digit = 6; }
+        if (ch == "7") { digit = 7; }
+        if (ch == "8") { digit = 8; }
+        if (ch == "9") { digit = 9; }
+        if (ch == "a" || ch == "A") { digit = 10; }
+        if (ch == "b" || ch == "B") { digit = 11; }
+        if (ch == "c" || ch == "C") { digit = 12; }
+        if (ch == "d" || ch == "D") { digit = 13; }
+        if (ch == "e" || ch == "E") { digit = 14; }
+        if (ch == "f" || ch == "F") { digit = 15; }
+        result = result * 16 + digit;
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Byte array to hex dump string "de ad be ef"
+export public func bin_hexdump(arr) {
+    var digs = _digits();
+    var result = "";
+    var i = 0;
+    while (i < arr.length()) {
+        if (i > 0) { result = result + " "; }
+        var b = arr[i] % 256;
+        result = result + digs[b / 16] + digs[b % 16];
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Byte array to hex dump with offset markers (16 bytes per row)
+export public func bin_hexdump_full(arr) {
+    var digs = _digits();
+    var result = "";
+    var row = 0;
+    while (row * 16 < arr.length()) {
+        -- Offset
+        var off = row * 16;
+        var oh = bin_to_hex(off);
+        result = result + oh + ": ";
+        -- Hex bytes
+        var col = 0;
+        while (col < 16) {
+            var idx = off + col;
+            if (idx < arr.length()) {
+                var b = arr[idx] % 256;
+                result = result + digs[b/16] + digs[b%16] + " ";
+            } else {
+                result = result + "   ";
+            }
+            col = col + 1;
+        }
+        result = result + "\n";
+        row = row + 1;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §5  BYTE ARRAY OPERATIONS
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Allocate a byte array of size n filled with zeros
+export public func bin_alloc(n) {
+    array result = [];
+    var i = 0;
+    while (i < n) { result.add(0); i = i + 1; }
+    return result;
+}
+
+-- Fill byte array with a value
+export public func bin_fill(arr, val) {
+    var b = val % 256;
+    var i = 0;
+    while (i < arr.length()) { arr[i] = b; i = i + 1; }
+}
+
+-- Slice byte array [start, end)
+export public func bin_slice(arr, start, end_idx) {
+    array result = [];
+    var i = start;
+    while (i < end_idx && i < arr.length()) { result.add(arr[i]); i = i + 1; }
+    return result;
+}
+
+-- XOR two byte arrays element-wise (result length = min(a, b))
+export public func bin_xor_bytes(a, b) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { result.add(bin_xor(a[i], b[i])); i = i + 1; }
+    return result;
+}
+
+-- AND two byte arrays element-wise
+export public func bin_and_bytes(a, b) {
+    array result = [];
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) { result.add(bin_and(a[i], b[i])); i = i + 1; }
+    return result;
+}
+
+-- Compare two byte arrays: returns -1, 0, or 1
+export public func bin_cmp(a, b) {
+    var n = a.length();
+    if (b.length() < n) { n = b.length(); }
+    var i = 0;
+    while (i < n) {
+        if (a[i] < b[i]) { return -1; }
+        if (a[i] > b[i]) { return  1; }
+        i = i + 1;
+    }
+    if (a.length() < b.length()) { return -1; }
+    if (a.length() > b.length()) { return  1; }
+    return 0;
+}
+
+-- Reverse byte array (non-mutating)
+export public func bin_reverse(arr) {
+    array result = [];
+    var i = arr.length() - 1;
+    while (i >= 0) { result.add(arr[i]); i = i - 1; }
+    return result;
+}
+
+-- XOR-encrypt/decrypt: key is a byte array, repeats cyclically
+export public func bin_xor_crypt(data, key) {
+    if (key.length() == 0) { return data; }
+    array result = [];
+    var i = 0;
+    while (i < data.length()) {
+        result.add(bin_xor(data[i], key[i % key.length()]));
+        i = i + 1;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §6  CHECKSUMS
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Simple sum checksum (8-bit, mod 256)
+export public func bin_sum8(arr) {
+    var s = 0;
+    var i = 0;
+    while (i < arr.length()) { s = s + arr[i]; i = i + 1; }
+    return s % 256;
+}
+
+-- XOR checksum: XOR of all bytes
+export public func bin_xor_check(arr) {
+    var x = 0;
+    var i = 0;
+    while (i < arr.length()) { x = bin_xor(x, arr[i]); i = i + 1; }
+    return x;
+}
+
+-- CRC-8 (polynomial 0x07, initial 0x00)
+export public func bin_crc8(arr) {
+    var crc = 0;
+    var i = 0;
+    while (i < arr.length()) {
+        crc = bin_xor(crc, arr[i]);
+        var j = 0;
+        while (j < 8) {
+            if (bin_and(crc, 0x80) != 0) {
+                crc = bin_xor(bin_shl(crc, 1), 0x07);
+            } else {
+                crc = bin_shl(crc, 1);
+            }
+            crc = crc % 256;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return crc;
+}
+
+-- CRC-16/CCITT (polynomial 0x1021, initial 0xFFFF)
+export public func bin_crc16(arr) {
+    var crc = 0xFFFF;
+    var poly = 0x1021;
+    var i = 0;
+    while (i < arr.length()) {
+        crc = bin_xor(crc, bin_shl(arr[i], 8));
+        var j = 0;
+        while (j < 8) {
+            if (bin_and(crc, 0x8000) != 0) {
+                crc = bin_xor(bin_shl(crc, 1), poly);
+            } else {
+                crc = bin_shl(crc, 1);
+            }
+            crc = bin_and(crc, 0xFFFF);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return crc;
+}
+
+-- Adler-32 checksum (used in zlib)
+export public func bin_adler32(arr) {
+    var s1 = 1;
+    var s2 = 0;
+    var mod_adler = 65521;
+    var i = 0;
+    while (i < arr.length()) {
+        s1 = (s1 + arr[i]) % mod_adler;
+        s2 = (s2 + s1)     % mod_adler;
+        i = i + 1;
+    }
+    return bin_or(bin_shl(s2, 16), s1);
+}
+
+-- Fletcher-16 checksum
+export public func bin_fletcher16(arr) {
+    var s1 = 0;
+    var s2 = 0;
+    var i = 0;
+    while (i < arr.length()) {
+        s1 = (s1 + arr[i]) % 255;
+        s2 = (s2 + s1)     % 255;
+        i = i + 1;
+    }
+    return bin_or(bin_shl(s2, 8), s1);
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §7  HASHING
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- FNV-1a 32-bit hash of a byte array
+export public func bin_fnv32(arr) {
+    var hash = 2166136261;
+    var prime = 16777619;
+    var i = 0;
+    while (i < arr.length()) {
+        hash = bin_xor(hash, arr[i]);
+        hash = u32(hash * prime);
+        i = i + 1;
+    }
+    return hash;
+}
+
+-- DJB2 hash of a string (or byte array treated as chars)
+export public func bin_djb2(arr) {
+    var hash = 5381;
+    var i = 0;
+    while (i < arr.length()) {
+        hash = u32(hash * 33 + arr[i]);
+        i = i + 1;
+    }
+    return hash;
+}
+
+-- SDBM hash
+export public func bin_sdbm(arr) {
+    var hash = 0;
+    var i = 0;
+    while (i < arr.length()) {
+        hash = u32(arr[i] + bin_shl(hash, 6) + bin_shl(hash, 16) - hash);
+        i = i + 1;
+    }
+    return hash;
+}
+
+-- Convert string to byte array (ASCII values)
+export public func bin_str_to_bytes(s) {
+    array result = [];
+    var i = 0;
+    while (i < s.length()) {
+        var ch = s[i];
+        -- Simple ASCII mapping for printable chars
+        var code = 0;
+        if (ch == " ")  { code = 32; }
+        if (ch == "!")  { code = 33; }
+        if (ch == "\"") { code = 34; }
+        if (ch == "#")  { code = 35; }
+        if (ch == "$")  { code = 36; }
+        if (ch == "%")  { code = 37; }
+        if (ch == "&")  { code = 38; }
+        if (ch == "'")  { code = 39; }
+        if (ch == "(")  { code = 40; }
+        if (ch == ")")  { code = 41; }
+        if (ch == "*")  { code = 42; }
+        if (ch == "+")  { code = 43; }
+        if (ch == ",")  { code = 44; }
+        if (ch == "-")  { code = 45; }
+        if (ch == ".")  { code = 46; }
+        if (ch == "/")  { code = 47; }
+        if (ch == "0")  { code = 48; }
+        if (ch == "1")  { code = 49; }
+        if (ch == "2")  { code = 50; }
+        if (ch == "3")  { code = 51; }
+        if (ch == "4")  { code = 52; }
+        if (ch == "5")  { code = 53; }
+        if (ch == "6")  { code = 54; }
+        if (ch == "7")  { code = 55; }
+        if (ch == "8")  { code = 56; }
+        if (ch == "9")  { code = 57; }
+        if (ch == ":")  { code = 58; }
+        if (ch == ";")  { code = 59; }
+        if (ch == "<")  { code = 60; }
+        if (ch == "=")  { code = 61; }
+        if (ch == ">")  { code = 62; }
+        if (ch == "?")  { code = 63; }
+        if (ch == "@")  { code = 64; }
+        if (ch == "A")  { code = 65; }
+        if (ch == "B")  { code = 66; }
+        if (ch == "C")  { code = 67; }
+        if (ch == "D")  { code = 68; }
+        if (ch == "E")  { code = 69; }
+        if (ch == "F")  { code = 70; }
+        if (ch == "G")  { code = 71; }
+        if (ch == "H")  { code = 72; }
+        if (ch == "I")  { code = 73; }
+        if (ch == "J")  { code = 74; }
+        if (ch == "K")  { code = 75; }
+        if (ch == "L")  { code = 76; }
+        if (ch == "M")  { code = 77; }
+        if (ch == "N")  { code = 78; }
+        if (ch == "O")  { code = 79; }
+        if (ch == "P")  { code = 80; }
+        if (ch == "Q")  { code = 81; }
+        if (ch == "R")  { code = 82; }
+        if (ch == "S")  { code = 83; }
+        if (ch == "T")  { code = 84; }
+        if (ch == "U")  { code = 85; }
+        if (ch == "V")  { code = 86; }
+        if (ch == "W")  { code = 87; }
+        if (ch == "X")  { code = 88; }
+        if (ch == "Y")  { code = 89; }
+        if (ch == "Z")  { code = 90; }
+        if (ch == "[")  { code = 91; }
+        if (ch == "\\") { code = 92; }
+        if (ch == "]")  { code = 93; }
+        if (ch == "^")  { code = 94; }
+        if (ch == "_")  { code = 95; }
+        if (ch == "`")  { code = 96; }
+        if (ch == "a")  { code = 97; }
+        if (ch == "b")  { code = 98; }
+        if (ch == "c")  { code = 99; }
+        if (ch == "d")  { code = 100; }
+        if (ch == "e")  { code = 101; }
+        if (ch == "f")  { code = 102; }
+        if (ch == "g")  { code = 103; }
+        if (ch == "h")  { code = 104; }
+        if (ch == "i")  { code = 105; }
+        if (ch == "j")  { code = 106; }
+        if (ch == "k")  { code = 107; }
+        if (ch == "l")  { code = 108; }
+        if (ch == "m")  { code = 109; }
+        if (ch == "n")  { code = 110; }
+        if (ch == "o")  { code = 111; }
+        if (ch == "p")  { code = 112; }
+        if (ch == "q")  { code = 113; }
+        if (ch == "r")  { code = 114; }
+        if (ch == "s")  { code = 115; }
+        if (ch == "t")  { code = 116; }
+        if (ch == "u")  { code = 117; }
+        if (ch == "v")  { code = 118; }
+        if (ch == "w")  { code = 119; }
+        if (ch == "x")  { code = 120; }
+        if (ch == "y")  { code = 121; }
+        if (ch == "z")  { code = 122; }
+        if (ch == "{")  { code = 123; }
+        if (ch == "|")  { code = 124; }
+        if (ch == "}")  { code = 125; }
+        if (ch == "~")  { code = 126; }
+        result.add(code);
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Hash a string using FNV-1a
+export public func bin_hash_str(s) {
+    return bin_fnv32(bin_str_to_bytes(s));
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §8  ENCODING
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Base64 alphabet
+private func _b64_alpha() {
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+}
+
+-- Base64 encode a byte array → string
+export public func bin_base64_encode(arr) {
+    var alpha = _b64_alpha();
+    var result = "";
+    var i = 0;
+    while (i < arr.length()) {
+        var b0 = arr[i];
+        var b1 = 0;
+        var b2 = 0;
+        if (i+1 < arr.length()) { b1 = arr[i+1]; }
+        if (i+2 < arr.length()) { b2 = arr[i+2]; }
+
+        var c0 = bin_shr(b0, 2);
+        var c1 = bin_or(bin_shl(bin_and(b0, 3), 4), bin_shr(b1, 4));
+        var c2 = bin_or(bin_shl(bin_and(b1, 15), 2), bin_shr(b2, 6));
+        var c3 = bin_and(b2, 63);
+
+        result = result + alpha[c0] + alpha[c1];
+        if (i+1 < arr.length()) { result = result + alpha[c2]; }
+        else                    { result = result + "="; }
+        if (i+2 < arr.length()) { result = result + alpha[c3]; }
+        else                    { result = result + "="; }
+
+        i = i + 3;
+    }
+    return result;
+}
+
+-- Internal: map a base64 char to its 6-bit value
+private func _b64_val(ch) {
+    var alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var j = 0;
+    while (j < alpha.length()) {
+        if (alpha[j] == ch) { return j; }
+        j = j + 1;
+    }
+    return 0;
+}
+
+-- Base64 decode string → byte array
+export public func bin_base64_decode(s) {
+    array result = [];
+
+    var i = 0;
+    while (i + 3 < s.length()) {
+        var c0 = _b64_val(s[i]);
+        var c1 = _b64_val(s[i+1]);
+        var c2 = _b64_val(s[i+2]);
+        var c3 = _b64_val(s[i+3]);
+
+        result.add(bin_or(bin_shl(c0, 2), bin_shr(c1, 4)));
+        if (s[i+2] != "=") {
+            result.add(bin_or(bin_shl(bin_and(c1,15), 4), bin_shr(c2, 2)));
+        }
+        if (s[i+3] != "=") {
+            result.add(bin_or(bin_shl(bin_and(c2,3), 6), c3));
+        }
+        i = i + 4;
+    }
+    return result;
+}
+
+-- Hex encode byte array → "0f1a2b..."
+export public func bin_hex_encode(arr) {
+    var digs = _digits();
+    var result = "";
+    var i = 0;
+    while (i < arr.length()) {
+        var b = arr[i] % 256;
+        result = result + digs[b/16] + digs[b%16];
+        i = i + 1;
+    }
+    return result;
+}
+
+-- Hex decode string → byte array
+export public func bin_hex_decode(s) {
+    array result = [];
+    var i = 0;
+    while (i + 1 < s.length()) {
+        result.add(bin_from_hex("" + s[i] + s[i+1]));
+        i = i + 2;
+    }
+    return result;
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §9  BINARY FILE I/O  (wraps __native__ calls)
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- Read raw bytes from a file → array of 0..255 integers
+export public func bin_read(path) {
+    return __native__(0x0301, path);
+}
+
+-- Write array of 0..255 byte values to a file → bool
+export public func bin_write(path, bytes) {
+    return __native__(0x0300, path, bytes);
+}
+
+-- Write array of integers with bit-width 8/16/32/64 (little-endian) → bool
+export public func bin_write_ints(path, ints, bits) {
+    return __native__(0x0302, path, ints, bits);
+}
+
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- §10  BINARY FILE FORMATS
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ── 10a. BMP: write a minimal 24-bpp bitmap (width×height, RGB rows) ──
+-- pixels = flat array of [R,G,B, R,G,B, ...] left-to-right, bottom-to-top
+export public func bin_write_bmp(path, width, height, pixels) {
+    -- Row stride: each row is padded to a multiple of 4 bytes
+    var row_bytes = width * 3;
+    var pad = (4 - row_bytes % 4) % 4;
+    var stride = row_bytes + pad;
+    var data_size = stride * height;
+    var file_size = 54 + data_size;
+
+    -- BITMAPFILEHEADER (14 bytes)
+    array header = [];
+    header.add(66); header.add(77);  -- "BM"
+    var fs = bin_pack_u32_le(file_size);
+    var i = 0;
+    while (i < fs.length()) { header.add(fs[i]); i = i + 1; }
+    header.add(0); header.add(0);    -- reserved
+    header.add(0); header.add(0);
+    var off = bin_pack_u32_le(54);
+    i = 0; while (i < off.length()) { header.add(off[i]); i = i + 1; }
+
+    -- BITMAPINFOHEADER (40 bytes)
+    var bih = bin_pack_u32_le(40);
+    i = 0; while (i < bih.length()) { header.add(bih[i]); i = i + 1; }
+    var pw = bin_pack_u32_le(width);
+    i = 0; while (i < pw.length()) { header.add(pw[i]); i = i + 1; }
+    var ph = bin_pack_u32_le(height);
+    i = 0; while (i < ph.length()) { header.add(ph[i]); i = i + 1; }
+    header.add(1); header.add(0);    -- color planes = 1
+    header.add(24); header.add(0);   -- 24 bpp
+    i = 0; while (i < 4) { header.add(0); i = i + 1; }  -- compression = 0
+    var ds = bin_pack_u32_le(data_size);
+    i = 0; while (i < ds.length()) { header.add(ds[i]); i = i + 1; }
+    -- pixels/meter (not critical) + color table
+    i = 0; while (i < 16) { header.add(0); i = i + 1; }
+
+    -- Pixel data: BMP stores bottom-row first, and channels are BGR
+    array pixel_data = [];
+    var row = height - 1;
+    while (row >= 0) {
+        var col = 0;
+        while (col < width) {
+            var base = (row * width + col) * 3;
+            pixel_data.add(pixels[base+2]);  -- B
+            pixel_data.add(pixels[base+1]);  -- G
+            pixel_data.add(pixels[base]);    -- R
+            col = col + 1;
+        }
+        var p = 0;
+        while (p < pad) { pixel_data.add(0); p = p + 1; }
+        row = row - 1;
+    }
+
+    return bin_write(path, bin_concat(header, pixel_data));
+}
+
+-- ── 10b. WAV: write a mono PCM WAV file ──
+-- samples = array of 16-bit signed integers [-32768..32767]
+-- sample_rate: typically 44100 or 22050
+export public func bin_write_wav(path, samples, sample_rate) {
+    var num_samples = samples.length();
+    var data_size   = num_samples * 2;   -- 16-bit = 2 bytes/sample
+    var file_size   = 36 + data_size;
+
+    array hdr = [];
+    -- "RIFF"
+    hdr.add(82); hdr.add(73); hdr.add(70); hdr.add(70);
+    var fs = bin_pack_u32_le(file_size);
+    var i = 0; while (i < fs.length()) { hdr.add(fs[i]); i = i + 1; }
+    -- "WAVE"
+    hdr.add(87); hdr.add(65); hdr.add(86); hdr.add(69);
+    -- "fmt "
+    hdr.add(102); hdr.add(109); hdr.add(116); hdr.add(32);
+    -- chunk size = 16
+    var cs = bin_pack_u32_le(16);
+    i = 0; while (i < cs.length()) { hdr.add(cs[i]); i = i + 1; }
+    -- PCM format = 1, channels = 1
+    hdr.add(1); hdr.add(0);
+    hdr.add(1); hdr.add(0);
+    -- sample rate
+    var sr = bin_pack_u32_le(sample_rate);
+    i = 0; while (i < sr.length()) { hdr.add(sr[i]); i = i + 1; }
+    -- byte rate = sample_rate * 2
+    var br = bin_pack_u32_le(sample_rate * 2);
+    i = 0; while (i < br.length()) { hdr.add(br[i]); i = i + 1; }
+    -- block align = 2, bits per sample = 16
+    hdr.add(2); hdr.add(0);
+    hdr.add(16); hdr.add(0);
+    -- "data"
+    hdr.add(100); hdr.add(97); hdr.add(116); hdr.add(97);
+    var ds = bin_pack_u32_le(data_size);
+    i = 0; while (i < ds.length()) { hdr.add(ds[i]); i = i + 1; }
+
+    -- Sample data (little-endian 16-bit, clamped)
+    array pcm = [];
+    i = 0;
+    while (i < num_samples) {
+        var s = samples[i];
+        if (s >  32767) { s =  32767; }
+        if (s < -32768) { s = -32768; }
+        if (s < 0) { s = s + 65536; }   -- two's complement
+        pcm.add(s % 256);
+        pcm.add((s - s%256) / 256);
+        i = i + 1;
+    }
+    return bin_write(path, bin_concat(hdr, pcm));
+}
+
+-- ── 10c. Custom binary format: .chndata ──
+-- Header: "CHNDv1" magic (6 bytes) + u32 record count + u32 field count
+-- Each record: sequence of u32 values
+export public func bin_write_chndata(path, records) {
+    if (records.length() == 0) { return bin_write(path, [67,72,78,68,118,49, 0,0,0,0, 0,0,0,0]); }
+    var n_rec    = records.length();
+    var n_fields = records[0].length();
+
+    array buf = [];
+    -- Magic "CHNDv1"
+    buf.add(67); buf.add(72); buf.add(78); buf.add(68); buf.add(118); buf.add(49);
+    -- Record count (u32 LE)
+    var rc = bin_pack_u32_le(n_rec);
+    var i = 0; while (i < rc.length()) { buf.add(rc[i]); i = i + 1; }
+    -- Field count (u32 LE)
+    var fc = bin_pack_u32_le(n_fields);
+    i = 0; while (i < fc.length()) { buf.add(fc[i]); i = i + 1; }
+    -- Records
+    var r = 0;
+    while (r < n_rec) {
+        var f = 0;
+        while (f < records[r].length()) {
+            var packed = bin_pack_u32_le(records[r][f]);
+            var j = 0; while (j < packed.length()) { buf.add(packed[j]); j = j + 1; }
+            f = f + 1;
+        }
+        r = r + 1;
+    }
+    return bin_write(path, buf);
+}
+
+-- Read a .chndata file → array of arrays
+export public func bin_read_chndata(path) {
+    var buf = bin_read(path);
+    array result = [];
+    if (buf.length() < 14) { return result; }
+    -- Skip magic (6 bytes)
+    var n_rec    = bin_unpack_u32_le(buf, 6);
+    var n_fields = bin_unpack_u32_le(buf, 10);
+    var off = 14;
+    var r = 0;
+    while (r < n_rec) {
+        array rec = [];
+        var f = 0;
+        while (f < n_fields && off + 3 < buf.length()) {
+            rec.add(bin_unpack_u32_le(buf, off));
+            off = off + 4;
+            f = f + 1;
+        }
+        result.add(rec);
+        r = r + 1;
+    }
+    return result;
+}

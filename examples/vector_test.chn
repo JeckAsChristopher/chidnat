@@ -1,0 +1,157 @@
+-- vector_test.chn — exercises the vector.chn library
+-- Run: ./chn examples/vector_test.chn
+
+imp vector
+
+stdo("=== vector_test.chn ===")
+stdo("")
+
+-- § Creation and push ──────────────────────────────────────────────────────────
+stdo("--- new / push ---")
+var v = vec_new()
+vec_push(v, 10)
+vec_push(v, 20)
+vec_push(v, 30)
+stdo("v:", v)
+stdo("size:", vec_size(v))
+stdo("is_empty:", vec_is_empty(v))
+
+-- § Pop, peek, shift ───────────────────────────────────────────────────────────
+stdo("")
+stdo("--- pop / peek / shift ---")
+stdo("peek:", vec_peek(v))
+var popped = vec_pop(v)
+stdo("popped:", popped)
+stdo("v after pop:", v)
+
+var q = vec_new()
+vec_push(q, 1)
+vec_push(q, 2)
+vec_push(q, 3)
+vec_unshift(q, 0)           -- prepend
+stdo("after unshift(0):", q)
+stdo("shift:", vec_shift(q)) -- remove front
+stdo("after shift:", q)
+
+-- § Access and mutation ────────────────────────────────────────────────────────
+stdo("")
+stdo("--- get / set / first / last ---")
+var a = vec_new()
+vec_push(a, 10)
+vec_push(a, 20)
+vec_push(a, 30)
+stdo("get[0]:", vec_get(a, 0))
+stdo("get[2]:", vec_get(a, 2))
+stdo("first:", vec_first(a))
+stdo("last:", vec_last(a))
+vec_set(a, 1, 99)
+stdo("after set[1]=99:", a)
+
+-- § Search ─────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- contains / index_of / count ---")
+var s = vec_new()
+vec_push(s, 1)
+vec_push(s, 2)
+vec_push(s, 2)
+vec_push(s, 3)
+stdo("contains 2:", vec_contains(s, 2))
+stdo("contains 9:", vec_contains(s, 9))
+stdo("index_of 2:", vec_index_of(s, 2))
+stdo("last_index_of 2:", vec_last_index_of(s, 2))
+stdo("count(2):", vec_count(s, 2))
+
+-- § Numeric ops ────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- numeric ---")
+var nums = vec_range(1, 6)    -- [1, 2, 3, 4, 5]
+stdo("range(1,6):", nums)
+stdo("sum:", vec_sum(nums))
+stdo("min:", vec_min(nums))
+stdo("max:", vec_max(nums))
+stdo("argmin:", vec_argmin(nums))
+stdo("argmax:", vec_argmax(nums))
+
+-- § Sort ───────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- sort ---")
+var unsorted = vec_new()
+vec_push(unsorted, 5)
+vec_push(unsorted, 2)
+vec_push(unsorted, 8)
+vec_push(unsorted, 1)
+vec_sort_asc(unsorted)
+stdo("sorted asc:", unsorted)
+vec_sort_desc(unsorted)
+stdo("sorted desc:", unsorted)
+
+-- § Reverse and rotate ─────────────────────────────────────────────────────────
+stdo("")
+stdo("--- reverse / rotate ---")
+var rv = vec_range(1, 6)
+vec_reverse(rv)
+stdo("reversed [1..5]:", rv)
+var rot = vec_range(1, 6)
+vec_rotate_left(rot, 2)
+stdo("rotate_left 2:", rot)
+
+-- § Slice / copy / concat ──────────────────────────────────────────────────────
+stdo("")
+stdo("--- slice / copy / concat ---")
+var base = vec_range(0, 10)   -- [0,1,2,...,9]
+var sliced = vec_slice(base, 2, 6)
+stdo("slice[2..6]:", sliced)
+var copied = vec_copy(base)
+vec_set(copied, 0, 999)
+stdo("original[0] unchanged:", vec_get(base, 0))
+stdo("copy[0] mutated:", vec_get(copied, 0))
+var extra = vec_new()
+vec_push(extra, 10)
+vec_push(extra, 11)
+var merged = vec_concat(sliced, extra)
+stdo("concat:", merged)
+
+-- § Set ops ────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- unique / intersect / diff ---")
+var dupes = vec_new()
+vec_push(dupes, 1)
+vec_push(dupes, 2)
+vec_push(dupes, 2)
+vec_push(dupes, 3)
+stdo("unique:", vec_unique(dupes))
+
+var x = vec_new()
+vec_push(x, 1)
+vec_push(x, 2)
+vec_push(x, 3)
+vec_push(x, 4)
+var y = vec_new()
+vec_push(y, 2)
+vec_push(y, 4)
+vec_push(y, 6)
+stdo("intersect:", vec_intersect(x, y))
+stdo("diff:", vec_diff(x, y))
+
+-- § Fill and clear ─────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- fill / fill_all / clear ---")
+var filled = vec_fill(7, 4)   -- [7, 7, 7, 7]
+stdo("fill(7, count=4):", filled)
+vec_fill_all(filled, 0)
+stdo("fill_all(0):", filled)
+vec_clear(filled)
+stdo("after clear, size:", vec_size(filled))
+
+-- § Join ───────────────────────────────────────────────────────────────────────
+stdo("")
+stdo("--- join ---")
+var words = vec_new()
+vec_push(words, "hello")
+vec_push(words, "from")
+vec_push(words, "CHN")
+stdo("join space:", vec_join(words, " "))
+stdo("join comma:", vec_join(words, ", "))
+
+stdo("")
+stdo("=== vector_test PASSED ===")

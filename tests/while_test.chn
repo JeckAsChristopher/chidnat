@@ -1,0 +1,18 @@
+-- While loop test
+var i = 0;
+while (i < 5) {
+    stdo(i);
+    i = i + 1;
+}
+stdo("Done!");
+
+-- String concatenation
+let name = "World";
+stdo("Hello, " + name + "!");
+
+-- Boolean and comparison
+var a = 10;
+var b = 20;
+stdo(a == b);
+stdo(a < b);
+stdo(a != b);

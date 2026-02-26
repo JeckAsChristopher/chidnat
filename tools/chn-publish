@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+#  chn-publish — publish a CHN library package to the registry
+#
+#  Usage:  chn-publish               (run inside your package directory)
+#          chn-publish --dry-run     (validate + preview, do not upload)
+#          chn-publish --version     (show version)
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+PUBLISH_VERSION="1.0.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
+# ── CLI args ───────────────────────────────────────────────────────────────────
+DRY_RUN=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run)   DRY_RUN=1 ;;
+        --version)   echo "chn-publish ${PUBLISH_VERSION}"; exit 0 ;;
+        --help|-h)
+            cat <<HELP
+
+  ${BOLD}chn-publish${RESET} — Publish a CHN library to the registry
+
+  ${FG_CYAN}Usage:${RESET}
+    chn-publish              Publish from current directory
+    chn-publish --dry-run    Validate without uploading
+    chn-publish --version    Show version
+
+  ${FG_CYAN}Your package directory must contain:${RESET}
+    CHN-CONF                 Package configuration file
+    <launch file>            The main .chn file (set in CHN-CONF launch:)
+    README.md                Optional but recommended
+    LICENSE                  Auto-generated on first publish
+
+  ${FG_CYAN}CHN-CONF example:${RESET}
+    name: "mylib"
+    description: "What this library does"
+    version: 1.0.0
+    license: MIT
+    launch: main/mylib.chn
+    dependencies: [os, map]
+    keywords: mylib utility
+
+HELP
+            exit 0
+            ;;
+        *)
+            err "Unknown argument: $arg"
+            err "Run 'chn-publish --help' for usage"
+            exit 1
+            ;;
+    esac
+done
+
+# ── Banner ─────────────────────────────────────────────────────────────────────
+printf "\n"
+printf "  ${FG_BRIGHT_WHITE}${BOLD}⬡  chn-publish${RESET}  ${FG_GRAY}v${PUBLISH_VERSION}${RESET}\n"
+printf "  ${FG_GRAY}Publish CHN libraries to the registry${RESET}\n\n"
+
+PKG_DIR="$(pwd)"
+CONF_FILE="${PKG_DIR}/CHN-CONF"
+
+# ── Step 1: Parse and validate CHN-CONF ────────────────────────────────────────
+step "Reading package configuration"
+
+[[ ! -f "$CONF_FILE" ]] && die "No CHN-CONF found in $(pwd)\n  Create one with 'name:', 'version:', 'license:', 'launch:', 'description:'"
+
+parse_chn_conf "$CONF_FILE"
+validate_chn_conf
+CONF_ERRORS=$?
+
+if [[ $CONF_ERRORS -gt 0 ]]; then
+    printf "\n"
+    die "$CONF_ERRORS error(s) in CHN-CONF — fix them and try again"
+fi
+
+ok "CHN-CONF is valid"
+label "name"         "$PKG_NAME"
+label "version"      "$PKG_VERSION"
+label "license"      "$PKG_LICENSE"
+label "launch"       "$PKG_LAUNCH"
+label "description"  "$PKG_DESC"
+if [[ ${#PKG_DEPS[@]} -gt 0 ]]; then
+    label "dependencies" "${PKG_DEPS[*]}"
+fi
+if [[ ${#PKG_KEYWORDS[@]} -gt 0 ]]; then
+    label "keywords" "${PKG_KEYWORDS[*]}"
+fi
+
+# ── Step 2: Validate launch file exists ───────────────────────────────────────
+step "Checking package files"
+
+LAUNCH_FILE="${PKG_DIR}/${PKG_LAUNCH}"
+if [[ ! -f "$LAUNCH_FILE" ]]; then
+    die "Launch file not found: $PKG_LAUNCH"
+fi
+
+# Validate .chn extension
+if [[ "$PKG_LAUNCH" != *.chn ]]; then
+    die "launch: must point to a .chn file, got: $PKG_LAUNCH"
+fi
+
+# Quick CHN syntax check — run chn --ast to see if it parses
+if command -v chn &>/dev/null; then
+    if ! chn --ast "$LAUNCH_FILE" &>/dev/null; then
+        err "Syntax error in launch file: $PKG_LAUNCH"
+        err "Run 'chn --ast $PKG_LAUNCH' to see the error"
+        die "Fix syntax errors before publishing"
+    fi
+    ok "Syntax check passed: $PKG_LAUNCH"
+else
+    warn "chn binary not in PATH — skipping syntax check"
+fi
+
+# Collect all files that will be published
+declare -a PUBLISH_FILES
+while IFS= read -r -d '' f; do
+    rel="${f#$PKG_DIR/}"
+    # skip hidden files, .git, temp files
+    [[ "$rel" =~ ^\.git ]] && continue
+    [[ "$rel" =~ ^\.     ]] && continue
+    [[ "$rel" =~ ~$      ]] && continue
+    PUBLISH_FILES+=("$rel")
+done < <(find "$PKG_DIR" -type f -not -path '*/.git/*' -print0 | sort -z)
+
+ok "Found ${#PUBLISH_FILES[@]} file(s) to publish"
+for f in "${PUBLISH_FILES[@]}"; do
+    dim "$f"
+done
+
+# ── Step 3: Check CDN connectivity ────────────────────────────────────────────
+step "Checking CDN"
+printf "  ${FG_GRAY}checking cdn...${RESET}\n"
+
+if check_cdn; then
+    ok "cdn publisher working"
+else
+    die "Cannot reach CDN (cdn.jsdelivr.net). Check your internet connection."
+fi
+
+# ── Step 4: Load auth config ───────────────────────────────────────────────────
+load_chn_config || true
+
+if [[ -z "${REGISTRY_REPO:-}" ]]; then
+    printf "\n"
+    warn "Registry not configured."
+    printf "  Run ${FG_CYAN}chn-config${RESET} first to set up your GitHub token and registry repo.\n"
+    printf "  Or set REGISTRY_REPO and GITHUB_TOKEN environment variables.\n\n"
+    die "Registry not configured"
+fi
+
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    die "GITHUB_TOKEN not set. Run 'chn-config' to configure."
+fi
+
+if [[ $DRY_RUN -eq 0 ]]; then
+    if ! check_github_api; then
+        die "GitHub API authentication failed. Check your GITHUB_TOKEN in ~/.chn/config"
+    fi
+    ok "GitHub API authenticated"
+fi
+
+# ── Step 5: Author info for LICENSE ───────────────────────────────────────────
+step "License information"
+printf "  ${FG_GRAY}To continue we need some information for the LICENSE${RESET}\n"
+printf "  ${FG_GRAY}(press Enter to skip any field)${RESET}\n\n"
+
+# Use saved values as defaults
+DEFAULT_NAME="${AUTHOR_NAME:-}"
+DEFAULT_EMAIL="${AUTHOR_EMAIL:-}"
+
+printf "  ${FG_CYAN}full name${RESET} ${FG_GRAY}[${DEFAULT_NAME}]${RESET}: "
+read -r INPUT_NAME
+[[ -z "$INPUT_NAME" && -n "$DEFAULT_NAME" ]] && INPUT_NAME="$DEFAULT_NAME"
+[[ -z "$INPUT_NAME" ]] && INPUT_NAME="N/A"
+
+printf "  ${FG_CYAN}email${RESET} ${FG_GRAY}[${DEFAULT_EMAIL}]${RESET}: "
+read -r INPUT_EMAIL
+[[ -z "$INPUT_EMAIL" && -n "$DEFAULT_EMAIL" ]] && INPUT_EMAIL="$DEFAULT_EMAIL"
+[[ "$INPUT_EMAIL" == "N/A" ]] && INPUT_EMAIL=""
+
+printf "  ${FG_CYAN}date published${RESET} ${FG_GRAY}[today]${RESET}: "
+read -r INPUT_DATE
+YEAR="$(date +%Y)"
+[[ -z "$INPUT_DATE" ]] && INPUT_DATE="$(date +%m/%d/%y)"
+
+printf "  ${FG_CYAN}company name${RESET} ${FG_GRAY}[N/A]${RESET}: "
+read -r INPUT_COMPANY
+[[ "$INPUT_COMPANY" == "N/A" ]] && INPUT_COMPANY=""
+
+# Save non-empty values for next time
+[[ "$INPUT_NAME" != "N/A" && -n "$INPUT_NAME" ]] && save_config_key "AUTHOR_NAME" "$INPUT_NAME"
+[[ -n "$INPUT_EMAIL" ]] && save_config_key "AUTHOR_EMAIL" "$INPUT_EMAIL"
+
+# Generate LICENSE
+LICENSE_CONTENT="$(generate_license "$PKG_LICENSE" "$INPUT_NAME" "$YEAR" "$INPUT_COMPANY" "$INPUT_EMAIL")"
+
+printf "\n"
+ok "LICENSE generated!"
+dim "License type: $PKG_LICENSE"
+dim "Copyright: $INPUT_NAME $([[ -n "$INPUT_COMPANY" ]] && echo "($INPUT_COMPANY)") $YEAR"
+dim "Date: $INPUT_DATE"
+
+# Write license to package dir
+echo "$LICENSE_CONTENT" > "${PKG_DIR}/LICENSE"
+
+# ── Step 6: Build manifest ─────────────────────────────────────────────────────
+step "Building package manifest"
+
+# Re-collect files now that LICENSE exists
+PUBLISH_FILES=()
+while IFS= read -r -d '' f; do
+    rel="${f#$PKG_DIR/}"
+    [[ "$rel" =~ ^\.git ]] && continue
+    [[ "$rel" =~ ^\.     ]] && continue
+    [[ "$rel" =~ ~$      ]] && continue
+    PUBLISH_FILES+=("$rel")
+done < <(find "$PKG_DIR" -type f -not -path '*/.git/*' -print0 | sort -z)
+
+# Build manifest JSON
+MANIFEST_LINES=()
+MANIFEST_LINES+=("{")
+MANIFEST_LINES+=("  \"name\": \"${PKG_NAME}\",")
+MANIFEST_LINES+=("  \"version\": \"${PKG_VERSION}\",")
+MANIFEST_LINES+=("  \"description\": \"${PKG_DESC}\",")
+MANIFEST_LINES+=("  \"license\": \"${PKG_LICENSE}\",")
+MANIFEST_LINES+=("  \"launch\": \"${PKG_LAUNCH}\",")
+
+# dependencies array
+DEPS_JSON="["
+for (( i=0; i<${#PKG_DEPS[@]}; i++ )); do
+    [[ $i -gt 0 ]] && DEPS_JSON+=", "
+    DEPS_JSON+="\"${PKG_DEPS[$i]}\""
+done
+DEPS_JSON+="]"
+MANIFEST_LINES+=("  \"dependencies\": ${DEPS_JSON},")
+
+# keywords array
+KW_JSON="["
+for (( i=0; i<${#PKG_KEYWORDS[@]}; i++ )); do
+    [[ $i -gt 0 ]] && KW_JSON+=", "
+    KW_JSON+="\"${PKG_KEYWORDS[$i]}\""
+done
+KW_JSON+="]"
+MANIFEST_LINES+=("  \"keywords\": ${KW_JSON},")
+
+# published info
+MANIFEST_LINES+=("  \"published_by\": \"${INPUT_NAME}\",")
+MANIFEST_LINES+=("  \"published_at\": \"${INPUT_DATE}\",")
+
+# file list
+FILES_JSON="["
+for (( i=0; i<${#PUBLISH_FILES[@]}; i++ )); do
+    [[ $i -gt 0 ]] && FILES_JSON+=", "
+    FILES_JSON+="\"${PUBLISH_FILES[$i]}\""
+done
+FILES_JSON+="]"
+MANIFEST_LINES+=("  \"files\": ${FILES_JSON}")
+MANIFEST_LINES+=("}")
+
+MANIFEST_JSON="$(printf '%s\n' "${MANIFEST_LINES[@]}")"
+echo "$MANIFEST_JSON" > "${PKG_DIR}/manifest.json"
+PUBLISH_FILES+=("manifest.json")
+
+ok "Manifest built (${#PUBLISH_FILES[@]} files)"
+
+# ── Step 7: Dry run exit ───────────────────────────────────────────────────────
+if [[ $DRY_RUN -eq 1 ]]; then
+    printf "\n"
+    warn "Dry run — nothing was uploaded"
+    printf "  Files that would be published:\n"
+    for f in "${PUBLISH_FILES[@]}"; do
+        dim "$f"
+    done
+    printf "\n"
+    ok "Dry run complete. Run without --dry-run to publish."
+    exit 0
+fi
+
+# ── Step 8: Upload files to GitHub ────────────────────────────────────────────
+step "Publishing to registry"
+printf "  ${FG_GRAY}uploading to ${REGISTRY_REPO}...${RESET}\n\n"
+
+REMOTE_BASE="packages/${PKG_NAME}/${PKG_VERSION}"
+TOTAL="${#PUBLISH_FILES[@]}"
+COUNT=0
+
+for f in "${PUBLISH_FILES[@]}"; do
+    ((COUNT++))
+    progress_bar $COUNT $TOTAL "uploading: $f"
+
+    local_path="${PKG_DIR}/${f}"
+    remote_path="${REMOTE_BASE}/${f}"
+    commit_msg="publish ${PKG_NAME}@${PKG_VERSION}: ${f}"
+
+    if ! gh_upload_file "$local_path" "$remote_path" "$commit_msg"; then
+        printf "\n"
+        die "Failed to upload: $f — check your GITHUB_TOKEN permissions"
+    fi
+    sleep 0.05   # avoid GitHub secondary rate limit
+done
+
+progress_done "Upload complete"
+
+# ── Step 9: Update registry.json ─────────────────────────────────────────────
+printf "\n"
+info "Updating registry index..."
+
+# Fetch current registry.json
+REGISTRY_JSON="$(fetch_registry 2>/dev/null || echo '{}')"
+
+# Update with Python (available, no jq needed)
+UPDATED_REGISTRY="$(python3 - <<PYEOF
+import json, sys
+
+try:
+    reg = json.loads('''${REGISTRY_JSON}'''.strip() or '{}')
+except:
+    reg = {}
+
+if 'packages' not in reg:
+    reg['packages'] = {}
+
+pkg = reg['packages'].get('${PKG_NAME}', {})
+pkg['name']        = '${PKG_NAME}'
+pkg['description'] = '${PKG_DESC}'
+pkg['license']     = '${PKG_LICENSE}'
+pkg['latest']      = '${PKG_VERSION}'
+pkg['keywords']    = [k for k in '${PKG_KEYWORDS[*]:-}'.split() if k]
+pkg['published_by'] = '${INPUT_NAME}'
+pkg['published_at'] = '${INPUT_DATE}'
+
+versions = pkg.get('versions', [])
+if '${PKG_VERSION}' not in versions:
+    versions.append('${PKG_VERSION}')
+# sort semver
+try:
+    versions.sort(key=lambda v: tuple(int(x) for x in v.split('.')))
+except:
+    pass
+pkg['versions'] = versions
+
+reg['packages']['${PKG_NAME}'] = pkg
+print(json.dumps(reg, indent=2))
+PYEOF
+)"
+
+# Upload registry.json
+REGISTRY_CONTENT_B64="$(echo "$UPDATED_REGISTRY" | b64encode)"
+REGISTRY_SHA="$(gh_get_sha "registry.json")"
+gh_api_put "registry.json" \
+    "registry: add/update ${PKG_NAME}@${PKG_VERSION}" \
+    "$REGISTRY_CONTENT_B64" \
+    "$REGISTRY_SHA" > /dev/null
+
+ok "Registry index updated"
+
+# ── Step 10: Success summary ───────────────────────────────────────────────────
+printf "\n"
+printf "  ${FG_BRIGHT_GREEN}${BOLD}Successfully published:${RESET}\n\n"
+
+for f in "${PUBLISH_FILES[@]}"; do
+    printf "    ${FG_GRAY}├─${RESET}  ${FG_WHITE}%s${RESET}\n" "$f"
+done
+
+printf "\n"
+label "package"  "$PKG_NAME"
+label "version"  "$PKG_VERSION"
+label "registry" "$REGISTRY_REPO"
+label "CDN URL"  "https://cdn.jsdelivr.net/gh/${REGISTRY_REPO}@main/packages/${PKG_NAME}/${PKG_VERSION}/"
+
+printf "\n"
+printf "  ${FG_GRAY}Install with:${RESET}  ${FG_CYAN}chn-install ${PKG_NAME}${RESET}\n\n"
