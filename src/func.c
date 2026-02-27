@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #include "func.h"
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +28,7 @@ FunctionObject *func_new(const char *name, FunctionVisibility vis,
 }
 
 int func_register(FunctionObject *f) {
-    /* Overwrite duplicate (same name+file) */
+    
     for (int i = 0; i < func_registry_count; i++) {
         if (strcmp(func_registry[i]->name, f->name) == 0 &&
             strcmp(func_registry[i]->source_file, f->source_file) == 0) {
@@ -51,15 +58,7 @@ int func_index(const char *name) {
     return -1;
 }
 
-/* ─── Protected access check ─────────────────────────────────────────────── 
- *
- * Protected means the function is only accessible by:
- *   1. Code within the SAME function that declared it
- *   2. Functions that are NESTED INSIDE that declaring function (subfunctions)
- *
- * In other words: a protected func is a private helper that only its
- * "family tree" (parent + children) can use.
- */
+
 bool func_can_access(FunctionObject *caller, FunctionObject *callee) {
     if (!callee) return false;
 
@@ -68,22 +67,21 @@ bool func_can_access(FunctionObject *caller, FunctionObject *callee) {
             return true;
 
         case VIS_PRIVATE:
-            /* Only functions in the same source file */
+            
             return (caller &&
                     strcmp(caller->source_file, callee->source_file) == 0);
 
         case VIS_PROTECTED: {
-            /* callee must have a parent. caller must be that parent
-               OR a nested function of that parent. */
+            
             FunctionObject *owner = callee->parent;
             if (!owner) {
-                /* Protected at top-level — only same-file */
-                if (!caller) return true;  /* top-level code in same file */
+                
+                if (!caller) return true;  
                 return strcmp(caller->source_file, callee->source_file) == 0;
             }
-            /* Is caller the owner itself? */
+            
             if (caller == owner) return true;
-            /* Is caller one of owner's nested functions? */
+            
             for (int i = 0; i < owner->nested_count; i++)
                 if (owner->nested[i] == caller) return true;
             return false;

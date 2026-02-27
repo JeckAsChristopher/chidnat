@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #include "error.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +20,7 @@ void error_init(const char *file, const char *source) {
     g_had_error   = false;
 }
 
-/* ─── Extract source line ─────────────────────────────────────────────────── */
+
 static void get_line(int lineno, char *out, int max) {
     if (!g_source_code) { out[0]='\0'; return; }
     const char *p = g_source_code;
@@ -24,7 +31,7 @@ static void get_line(int lineno, char *out, int max) {
     out[i] = '\0';
 }
 
-/* ─── Format a rich error box ─────────────────────────────────────────────── */
+
 static void print_error(const char *phase, int line,
                         const char *expected, const char *hint,
                         const char *msg) {
@@ -52,7 +59,7 @@ static void print_error(const char *phase, int line,
     fprintf(stderr, "\n");
 }
 
-/* ─── Phase reporters ─────────────────────────────────────────────────────── */
+
 void error_lex(int line, const char *fmt, ...) {
     char phase[64];
     snprintf(phase, sizeof(phase),
@@ -83,10 +90,10 @@ void error_runtime(int line, const char *fmt, ...) {
     print_error(phase, line, NULL, NULL, msg);
 }
 
-/* ─── Levenshtein distance ────────────────────────────────────────────────── */
+
 static int levenshtein(const char *a, const char *b) {
     int la = (int)strlen(a), lb = (int)strlen(b);
-    /* Use small VLAs — names are short */
+    
     if (la > 64 || lb > 64) return 99;
     int dp[65][65];
     for (int i = 0; i <= la; i++) dp[i][0] = i;

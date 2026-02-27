@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #ifndef AST_H
 #define AST_H
 
@@ -23,36 +30,36 @@ typedef enum {
 
 typedef struct ASTNode ASTNode;
 
-/* ── Simple value nodes ───────────────────────────────────────────────────── */
+
 typedef struct { double value; }            NumNode;
 typedef struct { char  *value; }            StrNode;
 typedef struct { bool   value; }            BoolNode;
 typedef struct { char   name[MAX_IDENT_LEN]; } IdentNode;
 
-/* ── Array literal ────────────────────────────────────────────────────────── */
+
 typedef struct { ASTNode **elements; int count; } ArrayLiteralNode;
 
-/* ── Binary / unary / assign ─────────────────────────────────────────────── */
+
 typedef struct { int op; ASTNode *left; ASTNode *right; } BinaryNode;
 typedef struct { int op; ASTNode *operand; }               UnaryNode;
 typedef struct { char name[MAX_IDENT_LEN]; ASTNode *value; } AssignNode;
 
-/* ── Declarations ─────────────────────────────────────────────────────────── */
+
 typedef struct { char name[MAX_IDENT_LEN]; ASTNode *initializer; bool is_let; } VarDeclNode;
 typedef struct { char name[MAX_IDENT_LEN]; ASTNode *initializer; }              ArrayDeclNode;
 
-/* ── I/O ──────────────────────────────────────────────────────────────────── */
+
 typedef struct { ASTNode **args; int arg_count; }                        PrintNode;
 typedef struct { char target[MAX_IDENT_LEN]; ASTNode *prompt_expr; }    InputNode;
 
-/* ── Control flow ─────────────────────────────────────────────────────────── */
+
 typedef struct { ASTNode *condition; ASTNode *then_branch; ASTNode *else_branch; } IfNode;
 typedef struct { ASTNode *condition; ASTNode *body; }                               WhileNode;
 typedef struct { ASTNode *init; ASTNode *condition; ASTNode *post; ASTNode *body; } ForNode;
 
-/* ── Switch ───────────────────────────────────────────────────────────────── */
+
 typedef struct {
-    ASTNode  *value;         /* the case value (NULL = default) */
+    ASTNode  *value;         
     ASTNode  *body;
 } SwitchCase;
 
@@ -60,33 +67,33 @@ typedef struct {
     ASTNode    *subject;
     SwitchCase *cases;
     int         case_count;
-    ASTNode    *default_body; /* NULL if no default */
+    ASTNode    *default_body; 
 } SwitchNode;
 
-/* ── Block / statement wrappers ───────────────────────────────────────────── */
+
 typedef struct { ASTNode **stmts; int count; } BlockNode;
 typedef struct { ASTNode *expr; }              ExprStmtNode;
 typedef struct { ASTNode *value; }             ReturnNode;
-/* break / continue carry no payload */
 
-/* ── Calls ────────────────────────────────────────────────────────────────── */
+
+
 typedef struct { char name[MAX_IDENT_LEN]; ASTNode **args; int arg_count; } CallNode;
 typedef struct {
-    ASTNode  *object_expr;       /* arbitrary expression (not just ident)    */
+    ASTNode  *object_expr;       
     char      method[MAX_IDENT_LEN];
     ASTNode **args; int arg_count;
 } MethodCallNode;
 typedef struct {
-    ASTNode *object_expr;        /* the array expression                     */
-    ASTNode *index;              /* index expression                         */
+    ASTNode *object_expr;        
+    ASTNode *index;              
 } IndexNode;
 typedef struct {
-    ASTNode *object_expr;        /* the array expression                     */
-    ASTNode *index;              /* index expression                         */
-    ASTNode *value;              /* right-hand side value to store           */
+    ASTNode *object_expr;        
+    ASTNode *index;              
+    ASTNode *value;              
 } IndexSetNode;
 
-/* ── Function declaration ─────────────────────────────────────────────────── */
+
 typedef struct {
     char               name[MAX_IDENT_LEN];
     char               params[MAX_PARAMS][MAX_IDENT_LEN];
@@ -95,22 +102,22 @@ typedef struct {
     FunctionVisibility visibility;
 } FuncDeclNode;
 
-/* ── Native call ────────────────────────────────────────────────────────────── */
+
 typedef struct {
-    uint16_t  call_id;        /* NativeCallID */
+    uint16_t  call_id;        
     ASTNode  *args[16];
     int       argc;
 } NativeCallNode;
 
-/* ── Module ───────────────────────────────────────────────────────────────── */
+
 typedef struct { char path[1024]; }           ImportNode;
 typedef struct {
     char      name[MAX_IDENT_LEN];
-    ASTNode  *func_def;   /* non-NULL for 'export func name()' inline form */
+    ASTNode  *func_def;   
 } ExportNode;
 typedef struct { ASTNode **stmts; int count; } ProgramNode;
 
-/* ── Main node ────────────────────────────────────────────────────────────── */
+
 struct ASTNode {
     NodeKind kind;
     int      line;
@@ -155,4 +162,4 @@ static inline ASTNode *node_alloc(NodeKind kind, int line){
 void ast_print(ASTNode *node, int indent);
 void ast_free (ASTNode *node);
 
-#endif /* AST_H */
+#endif 

@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #ifndef COMMON_H
 #define COMMON_H
 
@@ -20,15 +27,15 @@
 #define MAX_PARAMS        32
 #define MAX_CALL_DEPTH   256
 
-/* ── Forward typedefs (defined fully in gc.h) ─────────────────────────────── */
+
 typedef struct ObjString    ObjString;
 typedef struct ObjArray     ObjArray;
 typedef struct FunctionObject FunctionObject;
 
-/* ── Visibility ───────────────────────────────────────────────────────────── */
+
 typedef enum { VIS_PUBLIC, VIS_PRIVATE, VIS_PROTECTED } FunctionVisibility;
 
-/* ── Value ────────────────────────────────────────────────────────────────── */
+
 typedef enum {
     VAL_NUMBER, VAL_STRING, VAL_BOOL, VAL_NIL, VAL_FUNCTION, VAL_ARRAY
 } ValueType;
@@ -65,7 +72,7 @@ typedef struct Value_s {
 #define FUNC_VAL(f)    ((Value){VAL_FUNCTION,{.function =(FunctionObject*)(f)}})
 #define ARRAY_VAL(a)   ((Value){VAL_ARRAY,   {.array    =(ObjArray*)(a)}})
 
-/* ── Chunk ────────────────────────────────────────────────────────────────── */
+
 typedef struct {
     uint8_t  code[MAX_CODE];
     int      code_len;
@@ -76,7 +83,7 @@ typedef struct {
     int      var_count;
 } Chunk;
 
-/* ── Opcodes ──────────────────────────────────────────────────────────────── */
+
 typedef enum {
     OP_CONST,
     OP_NIL, OP_TRUE, OP_FALSE,
@@ -95,14 +102,14 @@ typedef enum {
     OP_ARRAY_NEW, OP_ARRAY_PUSH, OP_ARRAY_INDEX, OP_ARRAY_SET, OP_ARRAY_LEN,
     OP_METHOD_CALL,
 
-    OP_GC_SAFEPOINT,   /* incremental GC step — emitted at loop back-edges */
+    OP_GC_SAFEPOINT,   
 
     OP_PRINT, OP_PROMPT, OP_INPUT,
-    OP_NATIVE,  /* u16:call_id u8:argc — calls a built-in C function */
+    OP_NATIVE,  
     OP_HALT
 } OpCode;
 
-/* ── Array method IDs ─────────────────────────────────────────────────────── */
+
 typedef enum {
     METHOD_ADD=0, METHOD_INSERT, METHOD_CUT,
     METHOD_REMOVE, METHOD_RALL, METHOD_LENGTH, METHOD_UNKNOWN
@@ -183,4 +190,4 @@ static inline const char *opcode_name(OpCode op){
     }
 }
 
-#endif /* COMMON_H */
+#endif 

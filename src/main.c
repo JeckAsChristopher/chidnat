@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <unistd.h>
@@ -17,14 +24,14 @@
 #include "gc.h"
 #include "bytecode.h"
 
-/* ── Import tracking ──────────────────────────────────────────────────────── */
+
 #define MAX_IMPORTED 128
 static char imported_files[MAX_IMPORTED][1024];
 static int  imported_count = 0;
 static bool already_imported(const char *p){for(int i=0;i<imported_count;i++) if(!strcmp(imported_files[i],p)) return true; return false;}
 static void mark_imported(const char *p){if(imported_count<MAX_IMPORTED) strncpy(imported_files[imported_count++],p,1023);}
 
-/* ── File utils ───────────────────────────────────────────────────────────── */
+
 static char *read_file(const char *path){
     FILE *f=fopen(path,"rb");
     if(!f){fprintf(stderr,"\033[1;31merror:\033[0m cannot open '\033[1;36m%s\033[0m'\n\n",path);return NULL;}
@@ -35,29 +42,23 @@ static char *read_file(const char *path){
 }
 static bool file_exists(const char *p){struct stat st;return stat(p,&st)==0;}
 
-/* Directory of the running chn binary — set in main(), used for lib search */
+
 static char chn_bin_dir[1024] = "";
 
-/* ── Import search: try all candidate paths for a module name ─────────────
- * Search order for `imp "name"`:
- *   1. ./name.{function,chnc,chn}           (local to source file)
- *   2. ./chn-libs/name.*                    (local project libs)
- *   3. ../../chn-libs/name.*  (walk up tree, stopping at /)
- *   4. <chn-binary-dir>/chn-libs/name.*     (installation libs)
- * ─────────────────────────────────────────────────────────────────────────*/
+
 static bool try_import_from(const char *dir, const char *name,
-                             Compiler *parent_C);  /* forward decl */
+                             Compiler *parent_C);  
 
 static bool search_chn_libs(const char *rel_path, Compiler *parent_C) {
-    /* Extract bare module name (strip any path components and extension) */
+    
     const char *slash = strrchr(rel_path, '/');
     const char *name  = slash ? slash + 1 : rel_path;
-    /* Strip .chn extension if present */
+    
     char bare[256];
     strncpy(bare, name, sizeof(bare)-1); bare[sizeof(bare)-1] = '\0';
     char *dot = strrchr(bare, '.'); if (dot) *dot = '\0';
 
-    /* 1. Local directory of current source file */
+    
     char local_dir[1024] = "";
     if (parent_C->source_file[0]) {
         const char *sl = strrchr(parent_C->source_file, '/');
@@ -69,7 +70,7 @@ static bool search_chn_libs(const char *rel_path, Compiler *parent_C) {
 
     if (try_import_from(local_dir, bare, parent_C)) return true;
 
-    /* 2–3. Walk up directory tree checking for chn-libs/ in each level */
+    
     char walk[1024];
     strncpy(walk, local_dir, sizeof(walk)-1);
     for (int depth = 0; depth < 16; depth++) {
@@ -77,17 +78,17 @@ static bool search_chn_libs(const char *rel_path, Compiler *parent_C) {
         snprintf(libdir, sizeof(libdir), "%schn-libs/", walk);
         if (file_exists(libdir) && try_import_from(libdir, bare, parent_C))
             return true;
-        /* Go up one level */
+        
         int len = (int)strlen(walk);
-        if (len <= 1) break;                      /* reached root */
+        if (len <= 1) break;                      
         if (walk[len-1] == '/') walk[len-1] = '\0';
         char *up = strrchr(walk, '/');
         if (!up) break;
         *(up+1) = '\0';
-        if (strcmp(walk, local_dir) == 0) break;  /* no progress */
+        if (strcmp(walk, local_dir) == 0) break;  
     }
 
-    /* 4. Binary installation directory */
+    
     if (chn_bin_dir[0]) {
         char instdir[1100];
         snprintf(instdir, sizeof(instdir), "%s/chn-libs/", chn_bin_dir);
@@ -113,13 +114,13 @@ static void strip_ext(const char *path,char *out,size_t n){
     if(dot&&(!sl||dot>sl))*dot='\0';
 }
 
-/* ── Import handler ───────────────────────────────────────────────────────── */
+
 bool (*chn_import_handler)(const char *path, Compiler *C)=NULL;
 
-/* Compile and register one .chn source file into parent_C's import table */
+
 static bool compile_and_import(const char *src, Compiler *parent_C);
 
-/* Try to load module 'name' from directory 'dir' (all three formats) */
+
 static bool try_import_from(const char *dir, const char *name, Compiler *parent_C){
     char base[1024];
     snprintf(base,sizeof(base),"%s%s",dir,name);
@@ -157,18 +158,18 @@ static bool try_import_from(const char *dir, const char *name, Compiler *parent_
 }
 
 static bool do_import(const char *rel_path, Compiler *parent_C){
-    /* ── Step 1: Try path exactly as given (relative to current source file) ── */
+    
     char resolved[1024];
     resolve_path(parent_C->source_file,rel_path,resolved,sizeof(resolved));
     char base[1024]; strip_ext(resolved,base,sizeof(base));
 
-    /* For bare names (no slash, no extension) skip local-exact and go to search */
+    
     const char *sl2=strrchr(rel_path,'/');
     const char *dot2=strrchr(rel_path,'.');
     bool bare_name = !sl2 && !(dot2 && dot2>rel_path);
 
     if(!bare_name){
-        /* Explicit path: try it exactly */
+        
         if(already_imported(resolved)||already_imported(base)) return true;
         char fn_p[1100],cn_p[1100],sr_p[1100];
         snprintf(fn_p,sizeof(fn_p),"%s.function",base);
@@ -201,7 +202,7 @@ static bool do_import(const char *rel_path, Compiler *parent_C){
         return false;
     }
 
-    /* ── Step 2: Bare module name — search chn-libs/ tree ── */
+    
     if(search_chn_libs(rel_path,parent_C)) return true;
 
     fprintf(stderr,"\033[1;31merror:\033[0m cannot find module '\033[1;36m%s\033[0m'\n"
@@ -224,7 +225,7 @@ static bool compile_and_import(const char *src, Compiler *parent_C){
     C.import_handler=chn_import_handler;
     bool ok=compiler_compile(&C,ast);
     ast_free(ast);free(source);
-    /* Propagate any newly defined globals back to parent so further imports stack correctly */
+    
     if(ok&&!C.had_error){
         parent_C->global_count = C.global_count;
         parent_C->top_chunk.var_count = C.global_count;
@@ -234,7 +235,7 @@ static bool compile_and_import(const char *src, Compiler *parent_C){
     return ok&&!C.had_error;
 }
 
-/* ── Compile source file → Compiler ──────────────────────────────────────── */
+
 static bool compile_source(const char *filepath,const char *source,Compiler *C){
     error_init(filepath,source);
     Parser P;parser_init(&P,source);
@@ -303,7 +304,7 @@ static int run_chnc_file(const char *path){
     gc_free_all();return res;
 }
 
-/* ── REPL ─────────────────────────────────────────────────────────────────── */
+
 static void repl(void) {
     printf("Chidnat Open Source, Learn syntax through https://github.com/JeckAsChristopher/chidnat\n");
     char line_buf[4096];
@@ -344,7 +345,7 @@ static void usage(const char *p){
 }
 
 int main(int argc,char **argv){
-    /* Resolve binary's own directory for global chn-libs/ search */
+    
     {
         char self[1024]="";
         ssize_t n=readlink("/proc/self/exe",self,sizeof(self)-1);
@@ -369,7 +370,7 @@ int main(int argc,char **argv){
         else if(!strcmp(a,"-c")){
             if(!want_out){fprintf(stderr,"\033[1;31merror:\033[0m use '-o -c <out>' to compile\n       example: %s file.chn -o -c file.chnc\n\n",argv[0]);return 1;}
             mode=MODE_COMPILE_ONLY;
-            /* check for --f or output path */
+            
             if(i+1<argc&&!strcmp(argv[i+1],"--f")){i++;func_only=true;if(i+1<argc&&argv[i+1][0]!='-') out_path=argv[++i];}
             else if(i+1<argc&&argv[i+1][0]!='-') out_path=argv[++i];
         }

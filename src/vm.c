@@ -1,16 +1,23 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #include "vm.h"
 #include "gc.h"
 #include "error.h"
 #include "native.h"
 #include <math.h>
 
-/* ─── Frame / IP ─────────────────────────────────────────────────────────── */
+
 #define FRAME       (vm->frames[vm->frame_count - 1])
 #define FIP         (FRAME.ip)
 #define READ_BYTE() (*FIP++)
 #define READ_U16()  (FIP+=2, (uint16_t)(FIP[-2]) | ((uint16_t)(FIP[-1])<<8))
 
-/* ─── Stack ──────────────────────────────────────────────────────────────── */
+
 #define PUSH(v) do { \
     if(vm->stack_top>=MAX_STACK){ RT_ERROR("stack overflow"); return VM_RUNTIME_ERROR; } \
     vm->stack[vm->stack_top++]=(v); } while(0)
@@ -18,7 +25,7 @@
 #define PEEK(n)  (vm->stack[vm->stack_top-1-(n)])
 #define TOP()    PEEK(0)
 
-/* ─── Runtime error ─────────────────────────────────────────────────────── */
+
 static int vm_line(VM *vm){
     if(vm->frame_count==0) return 0;
     Chunk *ch=FRAME.function ? &FRAME.function->chunk : vm->top_chunk;
@@ -29,7 +36,7 @@ static int vm_line(VM *vm){
     error_runtime(vm_line(vm),fmt, ##__VA_ARGS__); \
     return VM_RUNTIME_ERROR; } while(0)
 
-/* ─── Value helpers ─────────────────────────────────────────────────────── */
+
 static const char *vtype(Value v){
     switch(v.type){
         case VAL_NUMBER:   return "number";
@@ -84,7 +91,7 @@ static void print_value(Value v){
     }
 }
 
-/* Forward declaration for recursive array-to-string */
+
 static void append_val_to_buf(Value v, char *buf, int *pos, int cap);
 
 static void append_val_to_buf(Value v, char *buf, int *pos, int cap){
@@ -128,7 +135,7 @@ static void append_val_to_buf(Value v, char *buf, int *pos, int cap){
 
 static ObjString *val_to_str(Value v){
     if(v.type == VAL_STRING) return v.as.string;
-    /* Use a 4096-byte buffer; large enough for most array representations */
+    
     char buf[4096];
     int pos = 0;
     append_val_to_buf(v, buf, &pos, (int)sizeof(buf));
@@ -136,11 +143,11 @@ static ObjString *val_to_str(Value v){
     return gc_cstring(buf);
 }
 
-/* ─── Local variable access ─────────────────────────────────────────────── */
+
 static inline Value  get_local(VM *vm, int slot){ return vm->stack[FRAME.base_idx+slot]; }
 static inline void   set_local(VM *vm, int slot, Value v){ vm->stack[FRAME.base_idx+slot]=v; }
 
-/* ─── Array helpers ─────────────────────────────────────────────────────── */
+
 static void arr_grow(ObjArray *a){
     int nc=a->cap<8?8:a->cap*2;
     a->items=(Value*)GC_GROW(a->items,(size_t)a->cap*sizeof(Value),(size_t)nc*sizeof(Value));
@@ -167,7 +174,7 @@ static void arr_rall(ObjArray *a, Value v){
     a->len=w;
 }
 
-/* ─── Init / free ─────────────────────────────────────────────────────────── */
+
 void vm_init(VM *vm){
     memset(vm,0,sizeof(VM));
     for(int i=0;i<MAX_VARIABLES;i++) vm->globals[i]=NIL_VAL;
@@ -175,7 +182,7 @@ void vm_init(VM *vm){
 }
 void vm_free(VM *vm){ (void)vm; gc_free_all(); }
 
-/* ─── Main loop ──────────────────────────────────────────────────────────── */
+
 VMResult vm_run(VM *vm, Chunk *top_chunk){
     vm->top_chunk=top_chunk;
     vm->frame_count=1;
@@ -187,7 +194,7 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
         uint8_t op=READ_BYTE();
         switch((OpCode)op){
 
-        /* ── Constants ── */
+        
         case OP_CONST:{
             uint16_t idx=READ_U16();
             Chunk *ch=FRAME.function?&FRAME.function->chunk:vm->top_chunk;
@@ -197,20 +204,20 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
         case OP_TRUE:  PUSH(BOOL_VAL(true));  break;
         case OP_FALSE: PUSH(BOOL_VAL(false)); break;
 
-        /* ── Stack ops ── */
+        
         case OP_POP: (void)POP(); break;
-        case OP_DUP: PUSH(TOP()); break;   /* duplicate top of stack */
+        case OP_DUP: PUSH(TOP()); break;   
 
-        /* ── Globals ── */
+        
         case OP_GET_VAR:{ uint16_t i=READ_U16(); PUSH(vm->globals[i]); break; }
         case OP_DEF_VAR:{ uint16_t i=READ_U16(); vm->globals[i]=POP(); break; }
         case OP_SET_VAR:{ uint16_t i=READ_U16(); vm->globals[i]=TOP(); break; }
 
-        /* ── Locals ── */
+        
         case OP_GET_LOCAL:{ uint16_t s=READ_U16(); PUSH(get_local(vm,s)); break; }
         case OP_SET_LOCAL:{ uint16_t s=READ_U16(); set_local(vm,s,TOP()); break; }
 
-        /* ── Arithmetic ── */
+        
         case OP_ADD:{
             Value b=POP(),a=POP();
             if(IS_STRING(a)||IS_STRING(b)){
@@ -246,7 +253,7 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             if(!IS_NUMBER(a)) RT_ERROR("unary '-' requires a number, got %s",vtype(a));
             PUSH(NUMBER_VAL(-AS_NUMBER(a))); break;}
 
-        /* ── Comparison ── */
+        
         case OP_EQ:  { Value b=POP(),a=POP(); PUSH(BOOL_VAL( val_eq(a,b))); break;}
         case OP_NEQ: { Value b=POP(),a=POP(); PUSH(BOOL_VAL(!val_eq(a,b))); break;}
         case OP_LT:  { Value b=POP(),a=POP();
@@ -263,7 +270,7 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             PUSH(BOOL_VAL(AS_NUMBER(a)>=AS_NUMBER(b))); break;}
         case OP_NOT: { Value a=POP(); PUSH(BOOL_VAL(!is_truthy(a))); break;}
 
-        /* ── Control flow ── */
+        
         case OP_JUMP:{
             uint16_t t=READ_U16();
             Chunk *ch=FRAME.function?&FRAME.function->chunk:vm->top_chunk;
@@ -283,7 +290,7 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             }
             break;}
 
-        /* ── Function call ── */
+        
         case OP_CALL:{
             uint16_t argc=READ_U16();
             Value fv=vm->stack[vm->stack_top-argc-1];
@@ -301,9 +308,9 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             Value ret=POP();
             int base=FRAME.base_idx;
             vm->frame_count--;
-            /* unwind stack to before the function value */
+            
             while(vm->stack_top>base) (void)POP();
-            if(base>0) (void)POP();   /* pop function value itself */
+            if(base>0) (void)POP();   
             PUSH(ret);
             if(vm->frame_count==0) return VM_OK;
             break;}
@@ -317,11 +324,11 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             arr_push(AS_ARRAY(TOP()),val); break;}
 
         case OP_ARRAY_INDEX:{
-            /* stack: [..., array_or_string, index] */
+            
             Value iv=POP(), av=POP();
             if(!IS_NUMBER(iv)) RT_ERROR("array index must be a number, got %s",vtype(iv));
             if(IS_STRING(av)){
-                /* String character indexing — returns a 1-char string */
+                
                 const char *s=AS_STRING(av)->chars;
                 int slen=(int)strlen(s);
                 int idx=(int)AS_NUMBER(iv);
@@ -333,14 +340,14 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             if(!IS_ARRAY(av)) RT_ERROR("cannot index a %s",vtype(av));
             ObjArray *a=AS_ARRAY(av);
             int idx=(int)AS_NUMBER(iv);
-            if(idx<0) idx=a->len+idx;   /* negative indexing: -1 = last */
+            if(idx<0) idx=a->len+idx;   
             if(idx<0||idx>=a->len)
                 RT_ERROR("index %d out of bounds (array length is %d)",
                          (int)AS_NUMBER(iv),a->len);
             PUSH(a->items[idx]); break;}
 
         case OP_ARRAY_SET:{
-            /* stack: [..., array, index, value] */
+            
             Value val=POP(), iv=POP(), av=POP();
             if(!IS_ARRAY(av)) RT_ERROR("cannot index-assign a %s",vtype(av));
             if(!IS_NUMBER(iv)) RT_ERROR("array index must be a number, got %s",vtype(iv));
@@ -350,10 +357,10 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             if(idx<0||idx>=a->len)
                 RT_ERROR("index %d out of bounds (array length is %d)",
                          (int)AS_NUMBER(iv),a->len);
-            /* Write barrier: if array is old-gen and value is a GC object, shade gray */
+            
             if(a->header.generation==GEN_OLD) gc_barrier_slow(val);
             a->items[idx]=val;
-            PUSH(val); break;}  /* assignment is an expression — leaves value on stack */
+            PUSH(val); break;}  
 
         case OP_ARRAY_LEN:{
             Value v=POP();
@@ -366,7 +373,7 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             uint8_t mid=READ_BYTE(), argc=READ_BYTE();
             Value av = vm->stack[vm->stack_top - argc - 1];
 
-            /* .length() works on both arrays AND strings */
+            
             if(mid==METHOD_LENGTH){
                 int len = 0;
                 if(IS_ARRAY(av))        len = AS_ARRAY(av)->len;
@@ -384,11 +391,11 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
             Value *args=&vm->stack[vm->stack_top-argc];
 
             switch((ArrayMethod)mid){
-                /* ── add(val): amortized O(1) push ── */
+                
                 case METHOD_ADD:
                     arr_push(a,args[0]);
                     break;
-                /* ── insert(idx, val): O(n) shift ── */
+                
                 case METHOD_INSERT:{
                     if(!IS_NUMBER(args[0])) RT_ERROR("insert: index must be a number");
                     int i=(int)AS_NUMBER(args[0]);
@@ -396,7 +403,7 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
                     if(i<0||i>a->len) RT_ERROR("insert: index %d out of bounds (length %d)",i,a->len);
                     arr_insert(a,i,args[1]);
                     break;}
-                /* ── cut(idx): O(n) remove by position ── */
+                
                 case METHOD_CUT:{
                     if(!IS_NUMBER(args[0])) RT_ERROR("cut: index must be a number");
                     int i=(int)AS_NUMBER(args[0]);
@@ -404,23 +411,23 @@ VMResult vm_run(VM *vm, Chunk *top_chunk){
                     if(i<0||i>=a->len) RT_ERROR("cut: index %d out of bounds (length %d)",i,a->len);
                     arr_cut(a,i);
                     break;}
-                /* ── remove(val): O(n) find-and-remove first ── */
+                
                 case METHOD_REMOVE: arr_remove(a,args[0]); break;
-                /* ── rall(val): O(n) remove all occurrences ── */
+                
                 case METHOD_RALL:   arr_rall(a,args[0]);   break;
                 default: RT_ERROR("unknown method id %d",mid);
             }
-            vm->stack_top -= (int)argc + 1;   /* pop args + array */
+            vm->stack_top -= (int)argc + 1;   
             PUSH(NIL_VAL);
             method_done:; break;
         }
 
-        /* ── GC safepoint: incremental collection step ── */
+        
         case OP_GC_SAFEPOINT:
             gc_step(vm);
             break;
 
-        /* ── I/O ── */
+        
         case OP_PROMPT:{
             Value v=POP(); print_value(v); fflush(stdout); break;}
 

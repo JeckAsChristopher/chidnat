@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #define _POSIX_C_SOURCE 200809L
 #include "bytecode.h"
 #include "gc.h"
@@ -7,9 +14,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Utility: error strings
- * ════════════════════════════════════════════════════════════════════════════ */
+
 const char *bc_result_str(BCResult r) {
     switch (r) {
         case BC_OK:            return "ok";
@@ -23,11 +28,9 @@ const char *bc_result_str(BCResult r) {
     }
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Obfuscation primitives
- * ════════════════════════════════════════════════════════════════════════════ */
 
-/* ── xorshift64 PRNG ─────────────────────────────────────────────────────── */
+
+
 static uint64_t xorshift64(uint64_t *state) {
     uint64_t x = *state;
     x ^= x << 13;
@@ -37,8 +40,8 @@ static uint64_t xorshift64(uint64_t *state) {
     return x;
 }
 
-/* ── Build OST (Opcode Substitution Table) from seed ─────────────────────── */
-/*    Fisher-Yates shuffle of [0..255] seeded by the 32-bit seed.             */
+
+
 static void build_ost(uint32_t seed, uint8_t ost[256], uint8_t ost_inv[256]) {
     for (int i = 0; i < 256; i++) ost[i] = (uint8_t)i;
     uint64_t state = (uint64_t)seed ^ 0xDEADBEEFCAFEBABEull;
@@ -47,11 +50,11 @@ static void build_ost(uint32_t seed, uint8_t ost[256], uint8_t ost_inv[256]) {
         int      j  = (int)(r % (uint64_t)(i + 1));
         uint8_t  t  = ost[i]; ost[i] = ost[j]; ost[j] = t;
     }
-    /* Build inverse */
+    
     for (int i = 0; i < 256; i++) ost_inv[ost[i]] = (uint8_t)i;
 }
 
-/* ── Build 64-byte XOR key from seed ─────────────────────────────────────── */
+
 static void build_key(uint32_t seed, uint8_t key[64]) {
     uint64_t state = (uint64_t)seed ^ 0x9E3779B97F4A7C15ull;
     for (int i = 0; i < 8; i++) {
@@ -61,13 +64,13 @@ static void build_key(uint32_t seed, uint8_t key[64]) {
     }
 }
 
-/* ── Rolling XOR (in-place) ──────────────────────────────────────────────── */
+
 static void xor_cipher(uint8_t *data, size_t len, const uint8_t key[64]) {
     for (size_t i = 0; i < len; i++)
         data[i] ^= key[i % 64];
 }
 
-/* ── Adler-32 checksum ────────────────────────────────────────────────────── */
+
 static uint32_t adler32(const uint8_t *data, size_t len) {
     uint32_t a = 1, b = 0;
     for (size_t i = 0; i < len; i++) {
@@ -77,9 +80,7 @@ static uint32_t adler32(const uint8_t *data, size_t len) {
     return (b << 16) | a;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Dynamic byte buffer (for building payload before writing)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 typedef struct { uint8_t *data; size_t len, cap; } Buf;
 
 static bool buf_grow(Buf *b, size_t need) {
@@ -105,7 +106,7 @@ static BCResult buf_write_f64(Buf *b, double v) {
     uint8_t x[8]; memcpy(x, &v, 8); BUF_WRITE(b, x, 8); return BC_OK;
 }
 static BCResult buf_write_str(Buf *b, const char *s, int fixed_len) {
-    /* fixed-length field: write up to fixed_len bytes, NUL-pad remainder */
+    
     int sl = (int)strlen(s);
     int write = sl < fixed_len ? sl : fixed_len;
     BUF_WRITE(b, s, write);
@@ -113,25 +114,22 @@ static BCResult buf_write_str(Buf *b, const char *s, int fixed_len) {
     return BC_OK;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Serialize Chunk into Buf (opcodes passed through OST)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static BCResult ser_chunk(Buf *b, const Chunk *ch, const uint8_t ost[256]) {
     BCResult r;
 
-    /* code */
+    
     if ((r = buf_write_u32(b, (uint32_t)ch->code_len))) return r;
     if (!buf_grow(b, ch->code_len)) return BC_ERR_OOM;
 
-    /* We must selectively apply OST only to opcode bytes, not operand bytes.
-       We walk the bytecode and know how many operand bytes each opcode has. */
+    
     int ip = 0;
     while (ip < ch->code_len) {
         OpCode op = (OpCode)ch->code[ip];
         uint8_t mapped = ost[ch->code[ip]];
         b->data[b->len++] = mapped;
         ip++;
-        /* Determine operand byte count for this opcode */
+        
         int operands = 0;
         switch (op) {
             case OP_CONST: case OP_GET_VAR: case OP_SET_VAR: case OP_DEF_VAR:
@@ -143,7 +141,7 @@ static BCResult ser_chunk(Buf *b, const Chunk *ch, const uint8_t ost[256]) {
                 operands = 2; break;
             case OP_INPUT:
                 operands = 3; break;
-            /* All zero-operand opcodes fall through to default */
+            
             case OP_NIL: case OP_TRUE: case OP_FALSE:
             case OP_POP: case OP_DUP:
             case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
@@ -157,14 +155,14 @@ static BCResult ser_chunk(Buf *b, const Chunk *ch, const uint8_t ost[256]) {
             default:
                 operands = 0; break;
             case OP_NATIVE:
-                operands = 3; break;  /* u16 call_id + u8 argc */
+                operands = 3; break;  
         }
-        /* Copy operand bytes raw (no OST) */
+        
         for (int i = 0; i < operands && ip < ch->code_len; i++, ip++)
             b->data[b->len++] = ch->code[ip];
     }
 
-    /* constants */
+    
     if ((r = buf_write_u32(b, (uint32_t)ch->const_count))) return r;
     for (int i = 0; i < ch->const_count; i++) {
         Value v = ch->constants[i];
@@ -184,17 +182,16 @@ static BCResult ser_chunk(Buf *b, const Chunk *ch, const uint8_t ost[256]) {
             case VAL_NIL:
                 break;
             case VAL_FUNCTION:
-                /* Function values in constants are referenced by name at runtime.
-                   Store the name so we can re-resolve on load. */
+                
                 if ((r = buf_write_str(b, v.as.function->name, MAX_IDENT_LEN))) return r;
                 break;
             default:
-                /* Arrays can't appear in compile-time constants */
+                
                 break;
         }
     }
 
-    /* var names */
+    
     if ((r = buf_write_u32(b, (uint32_t)ch->var_count))) return r;
     for (int i = 0; i < ch->var_count; i++)
         if ((r = buf_write_str(b, ch->var_names[i], MAX_IDENT_LEN))) return r;
@@ -202,7 +199,7 @@ static BCResult ser_chunk(Buf *b, const Chunk *ch, const uint8_t ost[256]) {
     return BC_OK;
 }
 
-/* ── Serialize one FunctionObject ────────────────────────────────────────── */
+
 static BCResult ser_func(Buf *b, const FunctionObject *f, const uint8_t ost[256]) {
     BCResult r;
     if ((r = buf_write_str(b, f->name,        MAX_IDENT_LEN))) return r;
@@ -215,20 +212,18 @@ static BCResult ser_func(Buf *b, const FunctionObject *f, const uint8_t ost[256]
     return ser_chunk(b, &f->chunk, ost);
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Build + encrypt payload, write file
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static BCResult write_file(const char *path, uint32_t magic, uint32_t seed,
                            Buf *plain_payload) {
-    /* Derive obfuscation material */
+    
     uint8_t ost[256], ost_inv[256], key[64];
     build_ost(seed, ost, ost_inv);
     build_key(seed, key);
 
-    /* Compute checksum of plaintext payload BEFORE encryption */
+    
     uint32_t csum = adler32(plain_payload->data, plain_payload->len);
 
-    /* Prepend junk block: length = seed & 0x3F bytes */
+    
     uint8_t junk_len = (uint8_t)(seed & 0x3Fu);
     uint64_t jstate  = (uint64_t)seed ^ 0xFACEFEEDull;
     uint8_t  junk[64];
@@ -237,7 +232,7 @@ static BCResult write_file(const char *path, uint32_t magic, uint32_t seed,
         junk[i] = (uint8_t)(jstate & 0xFF);
     }
 
-    /* Allocate encrypted buffer: junk + payload */
+    
     size_t enc_len = junk_len + plain_payload->len;
     uint8_t *enc   = (uint8_t*)malloc(enc_len);
     if (!enc) return BC_ERR_OOM;
@@ -245,7 +240,7 @@ static BCResult write_file(const char *path, uint32_t magic, uint32_t seed,
     memcpy(enc + junk_len, plain_payload->data, plain_payload->len);
     xor_cipher(enc, enc_len, key);
 
-    /* Write header + encrypted payload */
+    
     FILE *fp = fopen(path, "wb");
     if (!fp) { free(enc); return BC_ERR_IO; }
 
@@ -257,7 +252,7 @@ static BCResult write_file(const char *path, uint32_t magic, uint32_t seed,
     hdr[4] = CHNC_VERSION;
     hdr[5] = (uint8_t)(seed);        hdr[6] = (uint8_t)(seed>>8);
     hdr[7] = (uint8_t)(seed>>16);    hdr[8] = (uint8_t)(seed>>24);
-    /* plain_size (so reader knows how much to expect after decryption + junk skip) */
+    
     uint32_t ps = (uint32_t)plain_payload->len;
     hdr[9]  = (uint8_t)(ps);         hdr[10] = (uint8_t)(ps>>8);
     hdr[11] = (uint8_t)(ps>>16);     hdr[12] = (uint8_t)(ps>>24);
@@ -271,12 +266,10 @@ static BCResult write_file(const char *path, uint32_t magic, uint32_t seed,
     return ok ? BC_OK : BC_ERR_IO;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Public write APIs
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static uint32_t make_seed(void) {
     uint32_t s = (uint32_t)(time(NULL) ^ (uintptr_t)&s);
-    /* mix */
+    
     s ^= s << 13; s ^= s >> 17; s ^= s << 5;
     return s ? s : 0xDEADBEEFu;
 }
@@ -290,12 +283,12 @@ BCResult bc_write_program(const char *path, Compiler *C, uint32_t seed) {
     Buf b = {0};
     BCResult r;
 
-    /* Number of functions */
+    
     if ((r = buf_write_u32(&b, (uint32_t)C->func_count))) goto done;
     for (int i = 0; i < C->func_count; i++)
         if ((r = ser_func(&b, C->functions[i], ost))) goto done;
 
-    /* Top-level chunk */
+    
     r = ser_chunk(&b, &C->top_chunk, ost);
     if (r) goto done;
 
@@ -314,7 +307,7 @@ BCResult bc_write_functions(const char *path, Compiler *C, uint32_t seed) {
     Buf b = {0};
     BCResult r;
 
-    /* Count exported */
+    
     int n_exported = 0;
     for (int i = 0; i < C->func_count; i++)
         if (C->functions[i]->exported) n_exported++;
@@ -330,9 +323,7 @@ done:
     return r;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Deserialization (read side)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 typedef struct { const uint8_t *data; size_t len, pos; } Reader;
 
 static BCResult rd_u8 (Reader *r, uint8_t  *out) {
@@ -354,12 +345,12 @@ static BCResult rd_f64(Reader *r, double *out) {
 static BCResult rd_str(Reader *r, char *out, int fixed_len) {
     if ((size_t)(r->pos + fixed_len) > r->len) return BC_ERR_TRUNCATED;
     memcpy(out, r->data + r->pos, fixed_len);
-    out[fixed_len - 1] = '\0';   /* ensure NUL-terminated */
+    out[fixed_len - 1] = '\0';   
     r->pos += fixed_len; return BC_OK;
 }
 
 
-/* Deserialize a Chunk (opcodes mapped through inverse OST) */
+
 static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
     BCResult rc;
     memset(ch, 0, sizeof(Chunk));
@@ -369,7 +360,7 @@ static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
     if (code_len > MAX_CODE) return BC_ERR_TRUNCATED;
     ch->code_len = (int)code_len;
 
-    /* Read and un-map opcodes */
+    
     int ip = 0;
     while (ip < ch->code_len) {
         uint8_t mapped;
@@ -388,7 +379,7 @@ static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
                 operands = 2; break;
             case OP_INPUT:
                 operands = 3; break;
-            /* All zero-operand opcodes fall through to default */
+            
             case OP_NIL: case OP_TRUE: case OP_FALSE:
             case OP_POP: case OP_DUP:
             case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
@@ -402,15 +393,15 @@ static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
             default:
                 operands = 0; break;
             case OP_NATIVE:
-                operands = 3; break;  /* u16 call_id + u8 argc */
+                operands = 3; break;  
         }
-        /* Read operand bytes raw */
+        
         if ((size_t)(r->pos + operands) > r->len) return BC_ERR_TRUNCATED;
         for (int i = 0; i < operands; i++)
             ch->code[ip++] = r->data[r->pos++];
     }
 
-    /* Constants */
+    
     uint32_t const_count;
     if ((rc = rd_u32(r, &const_count))) return rc;
     if (const_count > MAX_CONSTANTS) return BC_ERR_TRUNCATED;
@@ -442,9 +433,7 @@ static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
                 ch->constants[i] = NIL_VAL;
                 break;
             case VAL_FUNCTION: {
-                /* Name was stored at write time; look it up in the registry now.
-                   Functions are always registered before their callers' chunks
-                   are deserialized (functions section comes first in .chnc). */
+                
                 char fname[MAX_IDENT_LEN];
                 if ((rc = rd_str(r, fname, MAX_IDENT_LEN))) return rc;
                 FunctionObject *f = func_lookup(fname);
@@ -456,11 +445,11 @@ static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
         }
     }
 
-    /* Var names (may extend what's already there from VAL_FUNCTION fixup hints) */
+    
     uint32_t var_count;
     if ((rc = rd_u32(r, &var_count))) return rc;
     if (var_count > MAX_VARIABLES) return BC_ERR_TRUNCATED;
-    /* Overwrite var_names properly */
+    
     ch->var_count = (int)var_count;
     for (int i = 0; i < ch->var_count; i++)
         if ((rc = rd_str(r, ch->var_names[i], MAX_IDENT_LEN))) return rc;
@@ -468,11 +457,8 @@ static BCResult deser_chunk(Reader *r, Chunk *ch, const uint8_t ost_inv[256]) {
     return BC_OK;
 }
 
-/* Deserialize one FunctionObject (allocates + registers) */
-/* ── Two-pass function deserialization ───────────────────────────────────────
- *  Pass 1: read header (name/arity/vis/etc), register in func_registry
- *  Pass 2: read chunk (all funcs now registered → recursive refs resolve)
- */
+
+
 
 static BCResult deser_func_header(Reader *r, FunctionObject **out) {
     BCResult rc;
@@ -493,7 +479,7 @@ static BCResult deser_func_header(Reader *r, FunctionObject **out) {
     f->exported = (exp != 0);
     if ((rc = rd_str(r, f->source_file, 1024))) goto err;
 
-    /* Register NOW so recursive references can resolve during chunk load */
+    
     func_register(f);
     *out = f;
     return BC_OK;
@@ -507,28 +493,25 @@ static BCResult deser_func_chunk(Reader *r, const uint8_t ost_inv[256],
     return deser_chunk(r, &f->chunk, ost_inv);
 }
 
-/* Legacy single-pass (used for .function files where no recursion expected) */
+
 static BCResult deser_func(Reader *r, const uint8_t ost_inv[256],
                             FunctionObject **out) {
     BCResult rc;
     if ((rc = deser_func_header(r, out))) return rc;
     return deser_func_chunk(r, ost_inv, *out);
 }
-/* Actually the cleanest solution: store function constants as VAL_STRING
-   with a special marker, and convert them back after loading. */
 
 
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Read header, decrypt, return plaintext payload in allocated buffer
- * ════════════════════════════════════════════════════════════════════════════ */
+
+
 static BCResult read_and_decrypt(const char *path, uint32_t expected_magic,
                                   uint8_t **out_plain, size_t *out_plain_len,
                                   uint8_t ost_inv_out[256]) {
     FILE *fp = fopen(path, "rb");
     if (!fp) return BC_ERR_IO;
 
-    /* Read header */
+    
     uint8_t hdr[17];
     if (fread(hdr, 1, 17, fp) != 17) { fclose(fp); return BC_ERR_TRUNCATED; }
 
@@ -545,7 +528,7 @@ static BCResult read_and_decrypt(const char *path, uint32_t expected_magic,
     if (magic != expected_magic) { fclose(fp); return BC_ERR_MAGIC; }
     if (ver   != CHNC_VERSION)   { fclose(fp); return BC_ERR_VERSION; }
 
-    /* Read encrypted payload */
+    
     fseek(fp, 0, SEEK_END);
     long fsize = ftell(fp);
     fclose(fp); fp = NULL;
@@ -561,23 +544,23 @@ static BCResult read_and_decrypt(const char *path, uint32_t expected_magic,
     }
     fclose(fp);
 
-    /* Decrypt */
+    
     uint8_t ost[256], key[64];
     build_ost(seed, ost, ost_inv_out);
     build_key(seed, key);
     xor_cipher(enc, enc_len, key);
 
-    /* Skip junk block */
+    
     uint8_t junk_len = (uint8_t)(seed & 0x3Fu);
     if (enc_len < junk_len + ps) { free(enc); return BC_ERR_TRUNCATED; }
 
     uint8_t *plain = enc + junk_len;
 
-    /* Verify checksum */
+    
     uint32_t got_csum = adler32(plain, ps);
     if (got_csum != csum) { free(enc); return BC_ERR_CHECKSUM; }
 
-    /* Copy out plaintext */
+    
     uint8_t *out = (uint8_t*)malloc(ps);
     if (!out) { free(enc); return BC_ERR_OOM; }
     memcpy(out, plain, ps);
@@ -588,9 +571,7 @@ static BCResult read_and_decrypt(const char *path, uint32_t expected_magic,
     return BC_OK;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Public read APIs
- * ════════════════════════════════════════════════════════════════════════════ */
+
 BCResult bc_read_program(const char *path, Chunk *out_chunk,
                          FunctionObject ***out_funcs, int *out_func_count) {
     uint8_t ost_inv[256];
@@ -605,14 +586,7 @@ BCResult bc_read_program(const char *path, Chunk *out_chunk,
     FunctionObject **funcs = (FunctionObject**)calloc(nf ? nf : 1, sizeof(FunctionObject*));
     if (!funcs) { r = BC_ERR_OOM; goto done; }
 
-    /* ── Pass 1: read all function headers + register in func_registry ──
-       The wire format interleaves header and chunk for each function,
-       so we track reader positions to do a logical two-pass:
-       Actually: for each function, its header fields are small and fixed.
-       We store each function's chunk start offset, then load chunks in pass 2.
-       But since deser_func_header reads variable-length arity params,
-       we can't easily skip. Instead: read header then record chunk start pos,
-       skip chunk (read its code_len+data), then in pass 2 seek back to load. */
+    
 
     size_t *chunk_offsets = (size_t*)calloc(nf ? nf : 1, sizeof(size_t));
     if (!chunk_offsets) { free(funcs); r = BC_ERR_OOM; goto done; }
@@ -623,12 +597,10 @@ BCResult bc_read_program(const char *path, Chunk *out_chunk,
         }
         chunk_offsets[i] = rd.pos;
 
-        /* Skip past the chunk data so we can read the next header.
-           Read code_len then skip code, read const_count then skip constants,
-           read var_count then skip var names. */
+        
         uint32_t code_len;
         if ((r = rd_u32(&rd, &code_len))) { free(chunk_offsets); free(funcs); goto done; }
-        /* Walk opcodes to know how many operand bytes to skip */
+        
         uint32_t ip = 0;
         while (ip < code_len) {
             uint8_t mapped;
@@ -650,7 +622,7 @@ BCResult bc_read_program(const char *path, Chunk *out_chunk,
             rd.pos += operands;
             ip += operands;
         }
-        /* Skip constants */
+        
         uint32_t cc;
         if ((r = rd_u32(&rd, &cc))) { free(chunk_offsets); free(funcs); goto done; }
         for (uint32_t c = 0; c < cc; c++) {
@@ -664,16 +636,15 @@ BCResult bc_read_program(const char *path, Chunk *out_chunk,
                 default: break;
             }
         }
-        /* Skip var names */
+        
         uint32_t vc; if ((r = rd_u32(&rd, &vc))) { free(chunk_offsets); free(funcs); goto done; }
         rd.pos += vc * MAX_IDENT_LEN;
     }
 
-    /* Position after pass 1 = start of the top-level chunk in the payload */
+    
     size_t top_chunk_start = rd.pos;
 
-    /* ── Pass 2: all functions registered → deserialize chunks ──
-       Seek back to each stored offset and load the chunk. */
+    
     for (uint32_t i = 0; i < nf; i++) {
         rd.pos = chunk_offsets[i];
         if ((r = deser_func_chunk(&rd, ost_inv, funcs[i]))) {
@@ -682,7 +653,7 @@ BCResult bc_read_program(const char *path, Chunk *out_chunk,
     }
     free(chunk_offsets);
 
-    /* Top-level chunk — seek back to where it starts */
+    
     rd.pos = top_chunk_start;
     r = deser_chunk(&rd, out_chunk, ost_inv);
     if (r) { free(funcs); goto done; }
@@ -718,9 +689,7 @@ done:
     return r;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Import helper: try .function then .chnc
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static bool file_exists(const char *p) {
     struct stat st;
     return stat(p, &st) == 0;
@@ -729,16 +698,16 @@ static bool file_exists(const char *p) {
 BCResult bc_try_import(const char *name, const char *from_dir,
                        FunctionObject ***out_funcs, int *out_count) {
     char path[2048];
-    /* Try: from_dir/name.function */
+    
     if (from_dir && from_dir[0]) {
         snprintf(path, sizeof(path), "%s/%s.function", from_dir, name);
         if (file_exists(path)) return bc_read_functions(path, out_funcs, out_count);
-        /* Try: from_dir/name.chnc (extract exported functions) */
+        
         snprintf(path, sizeof(path), "%s/%s.chnc", from_dir, name);
         if (file_exists(path)) {
             Chunk dummy;
             BCResult r = bc_read_program(path, &dummy, out_funcs, out_count);
-            /* Filter to only exported */
+            
             if (r == BC_OK) {
                 int n = *out_count;
                 FunctionObject **filtered = (FunctionObject**)
@@ -754,7 +723,7 @@ BCResult bc_try_import(const char *name, const char *from_dir,
             return r;
         }
     }
-    /* Try relative/absolute: name.function */
+    
     snprintf(path, sizeof(path), "%s.function", name);
     if (file_exists(path)) return bc_read_functions(path, out_funcs, out_count);
     snprintf(path, sizeof(path), "%s.chnc", name);
@@ -773,5 +742,5 @@ BCResult bc_try_import(const char *name, const char *from_dir,
         }
         return r;
     }
-    return BC_ERR_IO; /* not found */
+    return BC_ERR_IO; 
 }

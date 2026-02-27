@@ -1,10 +1,11 @@
-/*
- * native_net.c — Networking native calls for CHN
- *
- * Provides: TCP server/client, UDP, TLS (via OpenSSL), HTTP GET/POST
- * All blocking operations use select()-based timeouts.
- * TLS connections are tracked in a fixed pool (NET_MAX_TLS_CONNS slots).
- */
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
+
 
 #define _POSIX_C_SOURCE 200809L
 #include "native.h"
@@ -30,7 +31,7 @@
 #include <openssl/err.h>
 #include <openssl/x509.h>
 
-/* ── TLS connection pool ────────────────────────────────────────────────── */
+
 #define NET_MAX_TLS_CONNS  64
 #define NET_INVALID_ID     -1
 
@@ -38,8 +39,8 @@ typedef struct {
     int      active;
     int      fd;
     SSL     *ssl;
-    SSL_CTX *ctx;       /* non-NULL = this slot owns the ctx (server listener) */
-    int      is_server; /* 1 = server-side conn; 0 = client-side */
+    SSL_CTX *ctx;       
+    int      is_server; 
 } TlsConn;
 
 static TlsConn  tls_pool[NET_MAX_TLS_CONNS];
@@ -66,7 +67,7 @@ static TlsConn *tls_get(int id) {
     return &tls_pool[id];
 }
 
-/* ── Stack helpers ──────────────────────────────────────────────────────── */
+
 #define N_PUSH(v)  do { vm->stack[vm->stack_top++] = (v); } while(0)
 #define N_POP()    (vm->stack[--vm->stack_top])
 #define STR(v)     (IS_STRING(v) ? AS_STRING(v)->chars : "")
@@ -77,7 +78,7 @@ static Value sv(const char *s) {
     return s ? STRING_VAL(gc_cstring(s)) : NIL_VAL;
 }
 
-/* Return [a, b, c] array as a Value */
+
 static Value arr3(Value a, Value b, Value c) {
     ObjArray *arr = gc_array();
     gc_arr_push(arr, a);
@@ -86,7 +87,7 @@ static Value arr3(Value a, Value b, Value c) {
     return ARRAY_VAL(arr);
 }
 
-/* ── Socket timeout helpers ─────────────────────────────────────────────── */
+
 static int set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -97,7 +98,7 @@ static int set_blocking(int fd) {
     return fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
 }
 
-/* Wait for fd to be readable/writable, timeout_ms < 0 = infinite */
+
 static int wait_fd(int fd, int write, int timeout_ms) {
     fd_set fds;
     FD_ZERO(&fds);
@@ -115,7 +116,7 @@ static int wait_fd(int fd, int write, int timeout_ms) {
                   NULL, tvp);
 }
 
-/* ── DNS resolve ─────────────────────────────────────────────────────────── */
+
 static int resolve_host(const char *host, struct sockaddr_in *out) {
     struct addrinfo hints = {0}, *res = NULL;
     hints.ai_family   = AF_INET;
@@ -126,15 +127,15 @@ static int resolve_host(const char *host, struct sockaddr_in *out) {
     return 0;
 }
 
-/* ── HTTP parser ─────────────────────────────────────────────────────────── */
+
 typedef struct {
     int   status;
-    char *headers;  /* heap-allocated */
-    char *body;     /* heap-allocated */
+    char *headers;  
+    char *body;     
     int   body_len;
 } HttpResp;
 
-/* Parse URL into host, port, path */
+
 static int parse_url(const char *url,
                      char *host, int hlen,
                      int  *port,
@@ -147,7 +148,7 @@ static int parse_url(const char *url,
     else if (strncmp(p, "http://", 7) == 0)  { p += 7; }
     else return -1;
 
-    /* host[:port] */
+    
     const char *slash = strchr(p, '/');
     const char *colon = strchr(p, ':');
     int host_end = slash ? (int)(slash - p) : (int)strlen(p);
@@ -160,28 +161,27 @@ static int parse_url(const char *url,
         if (host_end >= hlen) host_end = hlen - 1;
         memcpy(host, p, host_end); host[host_end] = '\0';
     }
-    /* path */
+    
     if (slash) { strncpy(path, slash, plen - 1); path[plen-1] = '\0'; }
     else        { strncpy(path, "/", plen - 1); }
     return 0;
 }
 
-#define HTTP_RBUF  (1 << 20)  /* 1 MiB read buffer */
+#define HTTP_RBUF  (1 << 20)  
 
 static void free_resp(HttpResp *r) {
     free(r->headers); r->headers = NULL;
     free(r->body);    r->body    = NULL;
 }
 
-/* Do a raw HTTP exchange over fd (already connected, plain TCP).
- * Caller must free resp.headers and resp.body. */
+
 static int http_exchange(int fd, const char *request, HttpResp *resp, int timeout_ms) {
     resp->status   = 0;
     resp->headers  = NULL;
     resp->body     = NULL;
     resp->body_len = 0;
 
-    /* Send */
+    
     int rlen = (int)strlen(request);
     int sent = 0;
     while (sent < rlen) {
@@ -191,7 +191,7 @@ static int http_exchange(int fd, const char *request, HttpResp *resp, int timeou
         sent += n;
     }
 
-    /* Recv into growing buffer */
+    
     char *buf = (char*)malloc(HTTP_RBUF);
     if (!buf) return -1;
     int total = 0;
@@ -206,14 +206,14 @@ static int http_exchange(int fd, const char *request, HttpResp *resp, int timeou
     buf[total] = '\0';
     if (total == 0) { free(buf); return -1; }
 
-    /* Parse status line */
+    
     char *nl = strchr(buf, '\n');
     if (!nl) { free(buf); return -1; }
-    /* HTTP/x.x NNN ... */
+    
     const char *sp = strchr(buf, ' ');
     if (sp && sp < nl) resp->status = atoi(sp + 1);
 
-    /* Split headers / body at \r\n\r\n or \n\n */
+    
     char *body_start = strstr(buf, "\r\n\r\n");
     int   hdr_end    = 4;
     if (!body_start) { body_start = strstr(buf, "\n\n"); hdr_end = 2; }
@@ -235,7 +235,7 @@ static int http_exchange(int fd, const char *request, HttpResp *resp, int timeou
     return 0;
 }
 
-/* TLS variant of http_exchange */
+
 static int https_exchange(SSL *ssl, const char *request, HttpResp *resp) {
     resp->status   = 0;
     resp->headers  = NULL;
@@ -285,16 +285,14 @@ static int https_exchange(SSL *ssl, const char *request, HttpResp *resp) {
     return 0;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
- * net_dispatch: handle 0x0400–0x04FF
- * ══════════════════════════════════════════════════════════════════════════ */
+
 void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
     net_init();
-    if (argc > 8) argc = 8;  /* args already popped by caller */
+    if (argc > 8) argc = 8;  
 
     switch (id) {
 
-    /* ── NET_TCP_LISTEN(port) → fd ─────────────────────────────────────── */
+    
     case NATIVE_NET_TCP_LISTEN: {
         int port = argc >= 1 ? NUM(args[0]) : 8080;
         int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -313,7 +311,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TCP_ACCEPT(fd, timeout_ms) → [client_fd, ip] or nil ──────── */
+    
     case NATIVE_NET_TCP_ACCEPT: {
         int fd  = argc >= 1 ? NUM(args[0]) : -1;
         int tms = argc >= 2 ? NUM(args[1]) : 5000;
@@ -330,7 +328,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TCP_CONNECT(host, port, timeout_ms) → fd ──────────────────── */
+    
     case NATIVE_NET_TCP_CONNECT: {
         const char *host = argc >= 1 ? STR(args[0]) : "";
         int port  = argc >= 2 ? NUM(args[1]) : 80;
@@ -347,7 +345,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         int r = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
         if (r < 0 && errno != EINPROGRESS) { close(fd); N_PUSH(NUMBER_VAL(-1)); break; }
         if (wait_fd(fd, 1, tms) <= 0) { close(fd); N_PUSH(NUMBER_VAL(-1)); break; }
-        /* Verify connection actually succeeded (not just writeable on error) */
+        
         int err = 0; socklen_t elen = sizeof(err);
         getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &elen);
         if (err != 0) { close(fd); N_PUSH(NUMBER_VAL(-1)); break; }
@@ -356,7 +354,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_SEND(fd, data) → bytes_sent ───────────────────────────────── */
+    
     case NATIVE_NET_SEND: {
         int fd         = argc >= 1 ? NUM(args[0]) : -1;
         const char *d  = argc >= 2 ? STR(args[1]) : "";
@@ -366,7 +364,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_RECV(fd, max_bytes, timeout_ms) → str | nil ──────────────── */
+    
     case NATIVE_NET_RECV: {
         int fd  = argc >= 1 ? NUM(args[0]) : -1;
         int mx  = argc >= 2 ? NUM(args[1]) : 4096;
@@ -383,7 +381,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_CLOSE(fd) ──────────────────────────────────────────────────── */
+    
     case NATIVE_NET_CLOSE: {
         int fd = argc >= 1 ? NUM(args[0]) : -1;
         if (fd >= 0) close(fd);
@@ -391,7 +389,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_DNS(host) → ip_str ─────────────────────────────────────────── */
+    
     case NATIVE_NET_DNS: {
         const char *host = argc >= 1 ? STR(args[0]) : "";
         struct sockaddr_in addr = {0};
@@ -402,7 +400,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_UDP_BIND(port) → fd ────────────────────────────────────────── */
+    
     case NATIVE_NET_UDP_BIND: {
         int port = argc >= 1 ? NUM(args[0]) : 0;
         int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -418,7 +416,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_UDP_SEND(fd, host, port, data) → bool ─────────────────────── */
+    
     case NATIVE_NET_UDP_SEND: {
         int fd         = argc >= 1 ? NUM(args[0]) : -1;
         const char *h  = argc >= 2 ? STR(args[1]) : "";
@@ -434,7 +432,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_UDP_RECV(fd, max_bytes, timeout_ms) → [data,ip,port] | nil ── */
+    
     case NATIVE_NET_UDP_RECV: {
         int fd  = argc >= 1 ? NUM(args[0]) : -1;
         int mx  = argc >= 2 ? NUM(args[1]) : 4096;
@@ -454,7 +452,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_HTTP_GET(url, extra_headers, timeout_ms) → [status,hdrs,body] */
+    
     case NATIVE_NET_HTTP_GET: {
         const char *url  = argc >= 1 ? STR(args[0]) : "";
         const char *xhdr = argc >= 2 ? STR(args[1]) : "";
@@ -520,7 +518,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_HTTP_POST(url, body, content_type, timeout_ms) → [s,h,b] ─── */
+    
     case NATIVE_NET_HTTP_POST: {
         const char *url  = argc >= 1 ? STR(args[0]) : "";
         const char *body = argc >= 2 ? STR(args[1]) : "";
@@ -584,7 +582,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TLS_LISTEN(port, cert, key, ca) → id ──────────────────────── */
+    
     case NATIVE_NET_TLS_LISTEN: {
         int port        = argc >= 1 ? NUM(args[0]) : 8443;
         const char *crt = argc >= 2 ? STR(args[1]) : "";
@@ -627,7 +625,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TLS_ACCEPT(listener_id, timeout_ms) → conn_id ─────────────── */
+    
     case NATIVE_NET_TLS_ACCEPT: {
         int lid = argc >= 1 ? NUM(args[0]) : -1;
         int tms = argc >= 2 ? NUM(args[1]) : 5000;
@@ -651,13 +649,13 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         tls_pool[cid].active    = 1;
         tls_pool[cid].fd        = cfd;
         tls_pool[cid].ssl       = ssl;
-        tls_pool[cid].ctx       = NULL;  /* doesn't own ctx */
+        tls_pool[cid].ctx       = NULL;  
         tls_pool[cid].is_server = 1;
         N_PUSH(NUMBER_VAL((double)cid));
         break;
     }
 
-    /* ── NET_TLS_CONNECT(host, port, ca_cert, timeout_ms) → id ─────────── */
+    
     case NATIVE_NET_TLS_CONNECT: {
         const char *host = argc >= 1 ? STR(args[0]) : "";
         int port         = argc >= 2 ? NUM(args[1]) : 443;
@@ -706,7 +704,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TLS_SEND(id, data) → bytes ─────────────────────────────────── */
+    
     case NATIVE_NET_TLS_SEND: {
         int id         = argc >= 1 ? NUM(args[0]) : -1;
         const char *d  = argc >= 2 ? STR(args[1]) : "";
@@ -717,14 +715,14 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TLS_RECV(id, max_bytes, timeout_ms) → str | nil ────────────── */
+    
     case NATIVE_NET_TLS_RECV: {
         int id  = argc >= 1 ? NUM(args[0]) : -1;
         int mx  = argc >= 2 ? NUM(args[1]) : 4096;
         int tms = argc >= 3 ? NUM(args[2]) : 5000;
         TlsConn *c = tls_get(id);
         if (!c || !c->ssl || mx <= 0) { N_PUSH(NIL_VAL); break; }
-        /* Wait for data on the underlying fd */
+        
         if (wait_fd(c->fd, 0, tms) <= 0 && !SSL_pending(c->ssl)) {
             N_PUSH(NIL_VAL); break;
         }
@@ -738,7 +736,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_TLS_CLOSE(id) ──────────────────────────────────────────────── */
+    
     case NATIVE_NET_TLS_CLOSE: {
         int id = argc >= 1 ? NUM(args[0]) : -1;
         TlsConn *c = tls_get(id);
@@ -752,7 +750,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_PEER_ADDR(fd) → "ip:port" ──────────────────────────────────── */
+    
     case NATIVE_NET_PEER_ADDR: {
         int fd = argc >= 1 ? NUM(args[0]) : -1;
         if (fd < 0) { N_PUSH(sv("?")); break; }
@@ -768,7 +766,7 @@ void net_dispatch(VM *vm, uint16_t id, uint8_t argc, Value *args) {
         break;
     }
 
-    /* ── NET_SET_TIMEOUT(fd, ms) ──────────────────────────────────────────── */
+    
     case NATIVE_NET_SET_TIMEOUT: {
         int fd  = argc >= 1 ? NUM(args[0]) : -1;
         int tms = argc >= 2 ? NUM(args[1]) : 5000;

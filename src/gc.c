@@ -1,6 +1,13 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #include "gc.h"
 
-/* ── Shared array push (used by vm.c and native.c) ─────────────────────── */
+
 static void gc_arr_grow(ObjArray *a){
     int nc=a->cap<8?8:a->cap*2;
     a->items=(Value*)GC_GROW(a->items,(size_t)a->cap*sizeof(Value),(size_t)nc*sizeof(Value));
@@ -18,18 +25,14 @@ void gc_arr_push(ObjArray *a, Value v){
 
 GCState gc;
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Initialization
- * ════════════════════════════════════════════════════════════════════════════ */
+
 void gc_init(void) {
     memset(&gc, 0, sizeof(GCState));
     gc.next_gc_young = GC_YOUNG_THRESHOLD;
     gc.next_gc_major = GC_MAJOR_THRESHOLD;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Gray worklist helpers
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static void gray_push(Obj *obj) {
     if (!obj || obj->color != GC_WHITE) return;
     obj->color = GC_GRAY;
@@ -42,7 +45,7 @@ static void gray_push(Obj *obj) {
     gc.gray.stack[gc.gray.top++] = obj;
 }
 
-/* Trace one gray object → turn it black, push its white children gray */
+
 static void trace_obj(Obj *obj) {
     if (!obj || obj->color == GC_BLACK) return;
     obj->color = GC_BLACK;
@@ -54,12 +57,10 @@ static void trace_obj(Obj *obj) {
             else if (v.type == VAL_ARRAY)  gray_push((Obj*)v.as.array);
         }
     }
-    /* OBJ_STRING has no pointer children */
+    
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  String interning
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static uint32_t fnv1a(const char *data, int len) {
     uint32_t h = 2166136261u;
     for (int i = 0; i < len; i++) {
@@ -91,7 +92,7 @@ static void intern_insert(ObjString *s) {
             e->used = true; e->str = s; return;
         }
     }
-    /* Table full — don't intern, just proceed without caching */
+    
 }
 
 static void intern_remove(ObjString *s) {
@@ -104,9 +105,7 @@ static void intern_remove(ObjString *s) {
     }
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Object allocation
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static Obj *alloc_obj(ObjType type, size_t size) {
     Obj *obj = (Obj*)GC_ALLOC(size);
     obj->type       = type;
@@ -114,7 +113,7 @@ static Obj *alloc_obj(ObjType type, size_t size) {
     obj->generation = GEN_YOUNG;
     obj->age        = 0;
     obj->pinned     = false;
-    /* Insert into global list and young list */
+    
     obj->next       = gc.objects;  gc.objects   = obj;
     obj->gen_next   = gc.young_list; gc.young_list = obj;
     return obj;
@@ -122,7 +121,7 @@ static Obj *alloc_obj(ObjType type, size_t size) {
 
 ObjString *gc_string(const char *chars, int len) {
     uint32_t hash = fnv1a(chars ? chars : "", len);
-    /* Check intern table first */
+    
     ObjString *existing = intern_find(chars ? chars : "", len, hash);
     if (existing) return existing;
 
@@ -132,7 +131,7 @@ ObjString *gc_string(const char *chars, int len) {
     s->hash = hash;
     if (chars && len > 0) memcpy(s->chars, chars, (size_t)len);
     s->chars[len] = '\0';
-    s->header.pinned = true;  /* interned strings are roots — never swept */
+    s->header.pinned = true;  
     intern_insert(s);
     return s;
 }
@@ -147,9 +146,7 @@ ObjArray *gc_array(void) {
     return a;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Mark helpers (public for vm.c)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 void gc_mark_obj(Obj *obj) {
     gray_push(obj);
 }
@@ -159,22 +156,20 @@ void gc_mark_value(Value v) {
     else if (v.type == VAL_ARRAY)  gray_push((Obj*)v.as.array);
 }
 
-/* Write-barrier slow path: shade the new referent gray */
+
 void gc_barrier_slow(Value v) {
     if (gc.marking) gc_mark_value(v);
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Root marking (from VM)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static void mark_vm_roots(VM *vm) {
-    /* Stack values */
+    
     for (int i = 0; i < vm->stack_top; i++)
         gc_mark_value(vm->stack[i]);
-    /* Global variables */
+    
     for (int i = 0; i < MAX_VARIABLES; i++)
         gc_mark_value(vm->globals[i]);
-    /* Constants in all active call-frame chunks */
+    
     for (int i = 0; i < vm->frame_count; i++) {
         CallFrame *f = &vm->frames[i];
         Chunk *ch = f->function ? &f->function->chunk : vm->top_chunk;
@@ -182,17 +177,15 @@ static void mark_vm_roots(VM *vm) {
         for (int c = 0; c < ch->const_count; c++)
             gc_mark_value(ch->constants[c]);
     }
-    /* Pinned / interned strings are already roots via pinned flag */
+    
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Sweep — collect white objects (not yet reached this cycle)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 static void free_obj(Obj *obj) {
     size_t sz = 0;
     if (obj->type == OBJ_STRING) {
         ObjString *s = (ObjString*)obj;
-        if (s->header.pinned) return;  /* interned strings never freed here */
+        if (s->header.pinned) return;  
         intern_remove(s);
         sz = sizeof(ObjString) + (size_t)s->len + 1;
     } else if (obj->type == OBJ_ARRAY) {
@@ -207,14 +200,14 @@ static void sweep_generation(bool major) {
     Obj **link = &gc.objects;
     while (*link) {
         Obj *obj = *link;
-        /* Skip old-gen objects during minor GC */
+        
         if (!major && obj->generation == GEN_OLD) {
-            obj->color = GC_WHITE;  /* reset for next cycle */
+            obj->color = GC_WHITE;  
             link = &obj->next;
             continue;
         }
         if (obj->color == GC_BLACK || obj->pinned) {
-            /* Survived → maybe promote */
+            
             if (obj->generation == GEN_YOUNG) {
                 obj->age++;
                 if (obj->age >= GC_PROMOTE_AGE) {
@@ -224,12 +217,12 @@ static void sweep_generation(bool major) {
             obj->color = GC_WHITE;
             link = &obj->next;
         } else {
-            /* White → unreachable → free */
+            
             *link = obj->next;
             free_obj(obj);
         }
     }
-    /* Rebuild generation lists */
+    
     gc.young_list = NULL;
     gc.old_list   = NULL;
     for (Obj *o = gc.objects; o; o = o->next) {
@@ -239,13 +232,11 @@ static void sweep_generation(bool major) {
             o->gen_next = gc.old_list;   gc.old_list   = o;
         }
     }
-    /* Clear remembered set */
+    
     gc.remset.count = 0;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Full collection (stop-the-world)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 void gc_collect(void *vm_ptr) {
     if (gc.paused || !vm_ptr) return;
     gc.paused  = true;
@@ -256,23 +247,23 @@ void gc_collect(void *vm_ptr) {
                  ((gc.minor_collections % GC_MAJOR_EVERY) == 0 &&
                    gc.minor_collections > 0);
 
-    /* Mark phase */
+    
     mark_vm_roots((VM*)vm_ptr);
-    /* Add remembered set roots (old→young) for minor GC */
+    
     if (!major) {
         for (int i = 0; i < gc.remset.count; i++)
             gray_push(gc.remset.entries[i]);
     }
-    /* Drain gray stack completely */
+    
     while (gc.gray.top > 0)
         trace_obj(gc.gray.stack[--gc.gray.top]);
 
     gc.marking = false;
 
-    /* Sweep */
+    
     sweep_generation(major);
 
-    /* Update thresholds */
+    
     size_t ba = gc.bytes_allocated;
     gc.next_gc_young = ba < GC_YOUNG_THRESHOLD
                      ? GC_YOUNG_THRESHOLD
@@ -287,19 +278,17 @@ void gc_collect(void *vm_ptr) {
     gc.paused = false;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Incremental step (called from OP_GC_SAFEPOINT)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 void gc_step(void *vm_ptr) {
     if (gc.paused || !vm_ptr) return;
 
-    /* If we're in the middle of an incremental mark, drain a slice */
+    
     if (gc.marking && gc.gray.top > 0) {
         int n = GC_STEP_SIZE;
         while (gc.gray.top > 0 && n-- > 0)
             trace_obj(gc.gray.stack[--gc.gray.top]);
         if (gc.gray.top == 0) {
-            /* Mark complete → sweep */
+            
             gc.marking = false;
             gc.paused  = true;
             sweep_generation(gc.major_pending);
@@ -315,18 +304,18 @@ void gc_step(void *vm_ptr) {
         return;
     }
 
-    /* Check if we should start a new collection */
+    
     if (gc.bytes_allocated > gc.next_gc_major) {
         gc_collect(vm_ptr);
     } else if (gc.bytes_allocated > gc.next_gc_young) {
-        /* Start incremental minor mark */
+        
         gc.marking = true;
         gc.paused  = true;
         mark_vm_roots((VM*)vm_ptr);
         for (int i = 0; i < gc.remset.count; i++)
             gray_push(gc.remset.entries[i]);
         gc.paused = false;
-        /* Process initial slice */
+        
         int n = GC_STEP_SIZE;
         while (gc.gray.top > 0 && n-- > 0)
             trace_obj(gc.gray.stack[--gc.gray.top]);
@@ -344,14 +333,12 @@ void gc_step(void *vm_ptr) {
     }
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- *  Free all (shutdown)
- * ════════════════════════════════════════════════════════════════════════════ */
+
 void gc_free_all(void) {
     Obj *obj = gc.objects;
     while (obj) {
         Obj *next = obj->next;
-        obj->pinned = false;  /* allow freeing interned strings */
+        obj->pinned = false;  
         free_obj(obj);
         obj = next;
     }

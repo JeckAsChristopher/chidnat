@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #define _POSIX_C_SOURCE 200809L
 #include "lexer.h"
 #include "error.h"
@@ -52,10 +59,10 @@ static Token scan_string(Lexer *L){
                 case 'r':  buf[pos++]='\r'; break;
                 case '"':  buf[pos++]='"';  break;
                 case '\\': buf[pos++]='\\'; break;
-                case 'e':  buf[pos++]='\x1b'; break;  /* ESC for ANSI */
-                case '0':  /* \0 silently ignored — CHN strings are null-terminated, a literal \0 would truncate them */  break;
-                case 'a':  buf[pos++]='\a';  break;  /* bell */
-                case 'b':  buf[pos++]='\b';  break;  /* backspace */
+                case 'e':  buf[pos++]='\x1b'; break;  
+                case '0':    break;
+                case 'a':  buf[pos++]='\a';  break;  
+                case 'b':  buf[pos++]='\b';  break;  
                 default:   buf[pos++]='\\'; buf[pos++]=e;
             }
         } else { buf[pos++]=adv(L); }
@@ -72,9 +79,9 @@ static int is_hex_digit(char c){
     return (c>='0'&&c<='9')||(c>='a'&&c<='f')||(c>='A'&&c<='F');
 }
 static Token scan_number(Lexer *L){
-    /* Hex literal: 0x... */
+    
     if(*(L->current-1)=='0' && (pk(L)=='x'||pk(L)=='X')){
-        adv(L); /* consume x */
+        adv(L); 
         while(is_hex_digit(pk(L))) adv(L);
         Token t=mktok(L,TK_NUMBER);
         char buf[64]; int len=t.length<63?t.length:63;

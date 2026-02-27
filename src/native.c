@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #include "native.h"
 #include "vm.h"
 #include "error.h"
@@ -12,7 +19,7 @@
 #include <dirent.h>
 #include <unistd.h>
 
-/* ─── Internal macros ────────────────────────────────────────────────────── */
+
 #define N_PUSH(v)  do { vm->stack[vm->stack_top++] = (v); } while(0)
 #define N_POP()    (vm->stack[--vm->stack_top])
 #define N_PEEK(n)  (vm->stack[vm->stack_top-1-(n)])
@@ -20,24 +27,22 @@
 #define STR(v)     (IS_STRING(v) ? AS_STRING(v)->chars : "")
 #define NUM(v)     (IS_NUMBER(v) ? AS_NUMBER(v) : 0.0)
 
-/* ─── Helper: pop argc values into args[0..argc-1] (args[0] = deepest) ──── */
+
 static void pop_args(VM *vm, uint8_t argc, Value *args) {
     for (int i = argc - 1; i >= 0; i--)
         args[i] = N_POP();
 }
 
-/* ─── Helper: push a new empty ObjArray ─────────────────────────────────── */
+
 static ObjArray *new_arr(void) { return gc_array(); }
 
-/* ─── Helper: make a CHN string value from a C string ───────────────────── */
+
 static Value sv(const char *s) {
     if (!s) return NIL_VAL;
     return STRING_VAL(gc_cstring(s));
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
- * Dispatch
- * ══════════════════════════════════════════════════════════════════════════ */
+
 void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
     Value args[16];
     if (argc > 16) argc = 16;
@@ -45,16 +50,14 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
 
     switch (id) {
 
-    /* ──────────────────────────────────────────────────────────────────
-     * §OS: Time
-     * ────────────────────────────────────────────────────────────────── */
+    
     case NATIVE_OS_TIME: {
-        /* Unix timestamp as double (seconds since epoch) */
+        
         N_PUSH(NUMBER_VAL((double)time(NULL)));
         break;
     }
     case NATIVE_OS_CLOCK: {
-        /* High-resolution CPU time in seconds */
+        
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
         double t = (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
@@ -62,7 +65,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         break;
     }
     case NATIVE_OS_SLEEP: {
-        /* Sleep for N milliseconds */
+        
         double ms = argc >= 1 ? NUM(args[0]) : 0;
         struct timespec req;
         req.tv_sec  = (time_t)(ms / 1000.0);
@@ -74,7 +77,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
     case NATIVE_OS_EXIT: {
         int code = argc >= 1 ? (int)NUM(args[0]) : 0;
         exit(code);
-        break;  /* unreachable */
+        break;  
     }
     case NATIVE_OS_GETENV: {
         if (argc < 1 || !IS_STRING(args[0])) { N_PUSH(NIL_VAL); break; }
@@ -83,7 +86,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         break;
     }
     case NATIVE_OS_ARGS: {
-        /* Returns the command-line args stored during vm_init (empty for now) */
+        
         ObjArray *arr = new_arr();
         N_PUSH(ARRAY_VAL(arr));
         break;
@@ -117,9 +120,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         break;
     }
 
-    /* ──────────────────────────────────────────────────────────────────
-     * §File I/O
-     * ────────────────────────────────────────────────────────────────── */
+    
     case NATIVE_FILE_READ: {
         if (argc < 1 || !IS_STRING(args[0])) { N_PUSH(NIL_VAL); break; }
         FILE *fp = fopen(STR(args[0]), "rb");
@@ -184,7 +185,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         if (!fp) { N_PUSH(ARRAY_VAL(arr)); break; }
         char line[4096];
         while (fgets(line, sizeof(line), fp)) {
-            /* Strip trailing newline */
+            
             int len = strlen(line);
             while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r'))
                 line[--len] = '\0';
@@ -211,7 +212,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
     }
     case NATIVE_DIR_MAKE: {
         if (argc < 1 || !IS_STRING(args[0])) { N_PUSH(BOOL_VAL(false)); break; }
-        /* mkdir -p equivalent: create each segment */
+        
         char path[1024];
         strncpy(path, STR(args[0]), sizeof(path)-1);
         for (char *p = path + 1; *p; p++) {
@@ -242,11 +243,9 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         break;
     }
 
-    /* ──────────────────────────────────────────────────────────────────
-     * §Binary I/O
-     * ────────────────────────────────────────────────────────────────── */
+    
     case NATIVE_BIN_WRITE: {
-        /* Write array of integers as raw bytes to a file */
+        
         if (argc < 2 || !IS_STRING(args[0]) || !IS_ARRAY(args[1])) {
             N_PUSH(BOOL_VAL(false)); break;
         }
@@ -264,7 +263,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         break;
     }
     case NATIVE_BIN_READ: {
-        /* Read raw bytes from a file, return array of ints [0..255] */
+        
         if (argc < 1 || !IS_STRING(args[0])) { N_PUSH(ARRAY_VAL(new_arr())); break; }
         FILE *fp = fopen(STR(args[0]), "rb");
         if (!fp) { N_PUSH(ARRAY_VAL(new_arr())); break; }
@@ -280,7 +279,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
         break;
     }
     case NATIVE_BIN_WRITE_NUM: {
-        /* Write array of integers with a given bit-width (8/16/32/64), little-endian */
+        
         if (argc < 3 || !IS_STRING(args[0]) || !IS_ARRAY(args[1]) || !IS_NUMBER(args[2])) {
             N_PUSH(BOOL_VAL(false)); break;
         }
@@ -306,7 +305,7 @@ void native_dispatch(VM *vm, uint16_t id, uint8_t argc) {
 
     default:
         if (id >= 0x0400 && id <= 0x04FF) {
-            net_dispatch(vm, id, argc, args);  /* pass pre-popped args */
+            net_dispatch(vm, id, argc, args);  
         } else {
             N_PUSH(NIL_VAL);
         }

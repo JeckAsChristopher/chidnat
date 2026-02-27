@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #define _POSIX_C_SOURCE 200809L
 #include "parser.h"
 
@@ -13,7 +20,7 @@ static void nl_push(NL *nl, ASTNode *n){
 static ASTNode *nl_to_block(NL *nl, int line){
     ASTNode *b=node_alloc(NODE_BLOCK,line);
     b->block.stmts=nl->data; b->block.count=nl->len;
-    /* nl->data now owned by block — reset nl without freeing */
+    
     nl->data=NULL; nl->len=nl->cap=0;
     return b;
 }
@@ -33,7 +40,7 @@ static void consume_stmt_end(Parser *P){
     else if(check(P,TK_NEWLINE)) skip_nl(P);
 }
 
-/* forward decls */
+
 static ASTNode *parse_stmt(Parser *P);
 static ASTNode *parse_var_decl(Parser *P, bool is_let);
 static ASTNode *parse_array_decl(Parser *P);
@@ -89,7 +96,7 @@ static ASTNode *parse_stmt(Parser *P){
     skip_nl(P);
     if(check(P,TK_EOF)) return NULL;
 
-    /* visibility + func */
+    
     if((check(P,TK_PUBLIC)||check(P,TK_PRIVATE)||check(P,TK_PROTECTED))&&check2(P,TK_FUNC)){
         FunctionVisibility vis=check(P,TK_PUBLIC)?VIS_PUBLIC:check(P,TK_PROTECTED)?VIS_PROTECTED:VIS_PRIVATE;
         adv(P); adv(P);
@@ -191,7 +198,7 @@ static ASTNode *parse_array_decl(Parser *P){
     ASTNode *init=NULL;
     if(mat(P,TK_ASSIGN)){
         if(check(P,TK_LBRACKET)){
-            /* Literal array: [e1, e2, ...] */
+            
             adv(P);
             NL elems={0}; skip_nl(P);
             if(!check(P,TK_RBRACKET)){
@@ -202,7 +209,7 @@ static ASTNode *parse_array_decl(Parser *P){
             al->arr_lit.elements=elems.data; al->arr_lit.count=elems.len;
             init=al;
         } else {
-            /* Expression that returns an array (e.g. function call) */
+            
             init=parse_expr(P);
         }
     } else {
@@ -230,11 +237,11 @@ static ASTNode *parse_import(Parser *P){
     int line=P->current.line;
     ASTNode *n=node_alloc(NODE_IMPORT,line);
     if(check(P,TK_STRING)){
-        /* imp "path/to/file"  — explicit path with quotes */
+        
         strncpy(n->import.path,P->current.value.string,1023);
         adv(P);
     } else if(check(P,TK_IDENT)){
-        /* imp modulename  — bare identifier, resolved via chn-libs/ search */
+        
         int len = P->current.length < 1023 ? P->current.length : 1023;
         memcpy(n->import.path, P->current.start, len);
         n->import.path[len] = '\0';
@@ -248,13 +255,8 @@ static ASTNode *parse_import(Parser *P){
 
 static ASTNode *parse_export(Parser *P){
     int line=P->current.line;
-    /* Support: export func name()
-     *          export public func name()
-     *          export private func name()
-     *          export protected func name()
-     *          export funcName   (legacy: mark already-declared func as exported)
-     */
-    FunctionVisibility vis = VIS_PUBLIC;  /* default visibility for export */
+    
+    FunctionVisibility vis = VIS_PUBLIC;  
     if (check(P,TK_PUBLIC)||check(P,TK_PRIVATE)||check(P,TK_PROTECTED)){
         vis = check(P,TK_PUBLIC)?VIS_PUBLIC:check(P,TK_PROTECTED)?VIS_PROTECTED:VIS_PRIVATE;
         adv(P);
@@ -263,19 +265,15 @@ static ASTNode *parse_export(Parser *P){
         adv(P);
         ASTNode *fn = parse_func_decl(P, vis);
         if (!fn) return NULL;
-        /* Mark as exported: wrap in a NODE_EXPORT that names this function.
-           The compiler handles NODE_FUNC_DECL first, then NODE_EXPORT uses name. */
-        /* Simplest approach: return a NODE_EXPORT whose name = func_name,
-           and also compile the function by embedding it.
-           We actually just need to set the func as exported during compilation.
-           Use a dedicated flag by storing as NODE_EXPORT wrapping the func decl. */
+        
+        
         ASTNode *ex = node_alloc(NODE_EXPORT, line);
         strncpy(ex->export_node.name, fn->func_decl.name, MAX_IDENT_LEN-1);
-        /* Store the func_decl node so the compiler sees both */
+        
         ex->export_node.func_def = fn;
         return ex;
     }
-    /* Legacy form: export funcName */
+    
     if(!check(P,TK_IDENT)){
         error_parse(line,"function name","export funcName","expected name"); P->panic_mode=true; return NULL;
     }
@@ -288,7 +286,7 @@ static ASTNode *parse_export(Parser *P){
 
 
 static ASTNode *parse_native_call(Parser *P){
-    /* __native__(call_id, arg0, arg1, ...) */
+    
     int line=P->current.line;
     consume(P,TK_LPAREN,"'('","__native__(id, ...)");
     if(!check(P,TK_NUMBER)){ P->panic_mode=true; return NULL; }
@@ -402,7 +400,7 @@ static ASTNode *parse_for(Parser *P){
     return n;
 }
 
-/* ── Switch: switch (expr) { case val { body } ... default { body } } ──── */
+
 static ASTNode *parse_switch(Parser *P){
     int line=P->current.line;
     consume(P,TK_LPAREN,"'('","switch (expr) { case v: stmts break; }");
@@ -424,8 +422,7 @@ static ASTNode *parse_switch(Parser *P){
             skip_nl(P);
             if(check(P,TK_COLON)) adv(P);
             skip_nl(P);
-            /* collect statements until case / default / } — break is left
-               as a normal statement (NODE_BREAK), NOT consumed here      */
+            
             NL nl={0};
             while(!check(P,TK_RBRACE)&&!check(P,TK_EOF)
                   &&!check(P,TK_CASE)&&!check(P,TK_DEFAULT)){
@@ -486,11 +483,11 @@ static ASTNode *parse_block(Parser *P){
     return n;
 }
 
-/* ── Expressions ──────────────────────────────────────────────────────────── */
+
 static ASTNode *parse_expr(Parser *P) { return parse_assignment(P); }
 
 static ASTNode *parse_assignment(Parser *P){
-    /* Simple variable assignment: ident = expr */
+    
     if(check(P,TK_IDENT)&&check2(P,TK_ASSIGN)){
         char name[MAX_IDENT_LEN];
         int nlen=P->current.length<MAX_IDENT_LEN-1?P->current.length:MAX_IDENT_LEN-1;
@@ -501,15 +498,13 @@ static ASTNode *parse_assignment(Parser *P){
         strncpy(n->assign.name,name,MAX_IDENT_LEN-1);
         n->assign.value=val; return n;
     }
-    /* Index assignment: expr[idx] = val
-       Parse postfix first; if result is NODE_INDEX and next token is '=',
-       convert to NODE_INDEX_SET. */
+    
     ASTNode *lhs = parse_or(P);
     if(lhs && lhs->kind==NODE_INDEX && check(P,TK_ASSIGN)){
         int line=P->current.line; adv(P);
         ASTNode *val=parse_expr(P);
         ASTNode *n=node_alloc(NODE_INDEX_SET,line);
-        /* steal object_expr and index from the INDEX node */
+        
         n->index_set.object_expr = lhs->index.object_expr;
         n->index_set.index       = lhs->index.index;
         n->index_set.value       = val;
@@ -599,7 +594,7 @@ static ASTNode *parse_postfix(Parser *P){
             skip_nl(P);
             consume(P,TK_RPAREN,"')'","close args with ')'");
             ASTNode *n=node_alloc(NODE_METHOD_CALL,line);
-            n->method_call.object_expr = base;   /* ANY expression as object */
+            n->method_call.object_expr = base;   
             strncpy(n->method_call.method,method,MAX_IDENT_LEN-1);
             n->method_call.args=args.data; n->method_call.arg_count=args.len;
             base=n;
@@ -608,7 +603,7 @@ static ASTNode *parse_postfix(Parser *P){
             ASTNode *idx=parse_expr(P);
             consume(P,TK_RBRACKET,"']'","close index with ']'");
             ASTNode *n=node_alloc(NODE_INDEX,line);
-            n->index.object_expr = base;    /* ANY expression as object */
+            n->index.object_expr = base;    
             n->index.index=idx;
             base=n;
         } else break;

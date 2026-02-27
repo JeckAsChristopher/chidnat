@@ -1,3 +1,10 @@
+// This file is licensed under the Apache License, Version 2.0 (the "License").
+// You may not use, modify, copy, merge, publish, distribute, sublicense,
+// or sell copies of this software without explicit compliance with the License.
+// Unauthorized use, reproduction, or distribution of this file or its contents,
+// in whole or in part, is strictly prohibited and may result in legal consequences.
+// You must retain this notice in all copies or substantial portions of the software.
+// For full license terms, see: https://www.apache.org/licenses/LICENSE-2.0
 #define _POSIX_C_SOURCE 200809L
 #include "compiler.h"
 #include "native.h"
@@ -6,11 +13,11 @@
 
 extern bool (*chn_import_handler)(const char *path, Compiler *C);
 
-/* ─── Read u16 helper ────────────────────────────────────────────────────── */
+
 #define READ_U16_AT(arr,pos) \
     ((uint16_t)(arr)[(pos)] | ((uint16_t)(arr)[(pos)+1]<<8))
 
-/* ─── Emit helpers ───────────────────────────────────────────────────────── */
+
 static void emit_byte(Compiler *C, uint8_t b, int line){
     Chunk *ch=C->current_chunk;
     if(ch->code_len>=MAX_CODE){ error_compile(line,"program too large"); C->had_error=true; return; }
@@ -35,7 +42,7 @@ static void emit_const(Compiler *C, Value val, int line){
     emit_op1(C,OP_CONST,(uint16_t)add_constant(C,val,line),line);
 }
 
-/* emit a 3-byte JUMP_* placeholder; returns offset of operand for patching */
+
 static int emit_jump(Compiler *C, OpCode op, int line){
     emit_byte(C,(uint8_t)op,line);
     int patch=C->current_chunk->code_len;
@@ -47,26 +54,26 @@ static void patch_jump(Compiler *C, int pos){
     C->current_chunk->code[pos]  =(uint8_t)(t&0xFF);
     C->current_chunk->code[pos+1]=(uint8_t)((t>>8)&0xFF);
 }
-/* patch a specific jump to a specific target offset */
+
 static void patch_jump_to(Compiler *C, int patch_pos, int target){
     C->current_chunk->code[patch_pos]  =(uint8_t)((uint16_t)target&0xFF);
     C->current_chunk->code[patch_pos+1]=(uint8_t)(((uint16_t)target>>8)&0xFF);
 }
 static void emit_loop(Compiler *C, int loop_start, int line){
-    emit_op(C, OP_GC_SAFEPOINT, line);  /* incremental GC step at back-edge */
+    emit_op(C, OP_GC_SAFEPOINT, line);  
     emit_byte(C,(uint8_t)OP_JUMP,line);
     uint16_t t=(uint16_t)loop_start;
     emit_byte(C,(uint8_t)(t&0xFF),line); emit_byte(C,(uint8_t)((t>>8)&0xFF),line);
 }
 
-/* ─── Break/continue context helpers ─────────────────────────────────────── */
+
 static void push_ctx(Compiler *C, CtxKind kind){
     if(C->ctx_depth>=MAX_CTX_DEPTH){ C->had_error=true; return; }
     CtxFrame *f=&C->ctx_stack[C->ctx_depth++];
     f->kind=kind; f->break_count=0; f->continue_count=0; f->continue_target=-1;
 }
 
-/* call after the end of the loop/switch body — patches all breaks to here */
+
 static void pop_ctx_patch_breaks(Compiler *C){
     if(C->ctx_depth<=0) return;
     CtxFrame *f=&C->ctx_stack[--C->ctx_depth];
@@ -74,7 +81,7 @@ static void pop_ctx_patch_breaks(Compiler *C){
     for(int i=0;i<f->break_count;i++) patch_jump_to(C,f->break_patches[i],end);
 }
 
-/* emit a break: add JUMP placeholder, record it in current context */
+
 static void emit_break(Compiler *C, int line){
     if(C->ctx_depth<=0){
         error_compile(line,"'break' outside loop or switch"); C->had_error=true; return;
@@ -85,12 +92,12 @@ static void emit_break(Compiler *C, int line){
     f->break_patches[f->break_count++]=p;
 }
 
-/* emit a continue: add JUMP placeholder, record it */
+
 static void emit_continue(Compiler *C, int line){
     if(C->ctx_depth<=0){
         error_compile(line,"'continue' outside a loop"); C->had_error=true; return;
     }
-    /* find innermost loop context */
+    
     for(int i=C->ctx_depth-1;i>=0;i--){
         if(C->ctx_stack[i].kind==CTX_LOOP){
             CtxFrame *f=&C->ctx_stack[i];
@@ -103,36 +110,35 @@ static void emit_continue(Compiler *C, int line){
     error_compile(line,"'continue' not inside a loop (can't continue from switch)"); C->had_error=true;
 }
 
-/* patch continues to a known target (loop-start or post-expression) */
+
 static void patch_continues(Compiler *C, int target){
     if(C->ctx_depth<=0) return;
     CtxFrame *f=&C->ctx_stack[C->ctx_depth-1];
     for(int i=0;i<f->continue_count;i++) patch_jump_to(C,f->continue_patches[i],target);
 }
 
-/* ─── Symbol tables ──────────────────────────────────────────────────────── */
+
 static int global_find(Compiler *C, const char *name){
     for(int i=0;i<C->global_count;i++) if(!strcmp(C->globals[i].name,name)) return i;
     return -1;
 }
 static int global_define(Compiler *C, const char *name, bool is_let, int line){
-    /* If name already declared, warn but reuse the slot (avoids hard breaks in libraries
-       that may be imported multiple times). Promoting var → let is flagged. */
+    
     int existing = global_find(C, name);
     if (existing >= 0) {
         if (is_let && !C->globals[existing].is_let) {
-            /* Can't promote an existing var to let silently */
+            
             error_compile(line, "cannot redeclare 'var %s' as 'let' — use a different name", name);
             C->had_error = true;
             return existing;
         }
         if (!is_let && C->globals[existing].is_let) {
-            /* Can't shadow an existing let with var */
+            
             error_compile(line, "cannot redeclare 'let %s' as 'var' — '%s' is immutable", name, name);
             C->had_error = true;
             return existing;
         }
-        /* Same kind: silently update (re-assignment during import re-use) */
+        
         C->globals[existing].defined = false;
         return existing;
     }
@@ -156,15 +162,14 @@ static int local_define(Compiler *C, const char *name, bool is_let, int line){
     return slot;
 }
 
-/* Emit POPs for any locals defined since saved_lc, then restore local_count.
-   Used to clean up scope-local variables at the end of a block/loop body. */
+
 static void pop_scope(Compiler *C, int saved_lc, int line){
     int n = C->local_count - saved_lc;
     for(int i=0;i<n;i++) emit_op(C,OP_POP,line);
     C->local_count = saved_lc;
 }
 
-/* ─── "Did you mean?" suggestions ───────────────────────────────────────── */
+
 static void suggest_variable(Compiler *C, const char *name, int line){
     const char *cands[MAX_VARIABLES+MAX_LOCALS+4]; int nc=0;
     if(C->in_function) for(int i=0;i<C->local_count;i++) cands[nc++]=C->locals[i].name;
@@ -182,11 +187,11 @@ static void suggest_function(Compiler *C, const char *name, int line){
     else  error_compile(line,"undefined function '%s' — declare it with 'public func %s(...) { }'",name,name);
 }
 
-/* ─── Function resolution ────────────────────────────────────────────────── */
+
 typedef struct { FunctionObject *func; } FuncRef;
 static FuncRef resolve_function(Compiler *C, const char *name, int line){
     FuncRef ref={NULL};
-    /* 1. same-file functions */
+    
     for(int i=0;i<C->func_count;i++){
         if(!strcmp(C->functions[i]->name,name)){
             FunctionObject *callee=C->functions[i];
@@ -202,7 +207,7 @@ static FuncRef resolve_function(Compiler *C, const char *name, int line){
             ref.func=callee; return ref;
         }
     }
-    /* 2. imported functions */
+    
     for(int i=0;i<C->import_count;i++){
         FunctionObject *f=C->imports[i];
         if(strcmp(f->name,name)) continue;
@@ -224,7 +229,7 @@ static FuncRef resolve_function(Compiler *C, const char *name, int line){
     return ref;
 }
 
-/* ─── Variable emit helpers (local-aware) ────────────────────────────────── */
+
 static void emit_load(Compiler *C, const char *name, int line){
     if(C->in_function){
         int slot=local_find(C,name);
@@ -235,11 +240,11 @@ static void emit_load(Compiler *C, const char *name, int line){
     emit_op1(C,OP_GET_VAR,(uint16_t)C->globals[idx].index,line);
 }
 
-/* ─── Forward declarations ───────────────────────────────────────────────── */
+
 static void compile_expr(Compiler *C, ASTNode *node);
 static void compile_stmt(Compiler *C, ASTNode *node);
 
-/* ─── Compile expression ─────────────────────────────────────────────────── */
+
 static void compile_expr(Compiler *C, ASTNode *node){
     if(!node||C->had_error) return;
     int line=node->line;
@@ -375,13 +380,13 @@ static void compile_expr(Compiler *C, ASTNode *node){
                               node->method_call.method,exp_argc[mid],node->method_call.arg_count);
                 C->had_error=true; return;
             }
-            /* Optimization: .length() → single OP_ARRAY_LEN (1 byte, handles arrays+strings) */
+            
             if(mid==METHOD_LENGTH){
                 compile_expr(C, node->method_call.object_expr);
                 emit_op(C, OP_ARRAY_LEN, line);
                 break;
             }
-            /* Compile the object expression (any expression, not just ident) */
+            
             compile_expr(C, node->method_call.object_expr);
             for(int i=0;i<node->method_call.arg_count;i++) compile_expr(C,node->method_call.args[i]);
             emit_byte(C,(uint8_t)OP_METHOD_CALL,line);
@@ -391,7 +396,7 @@ static void compile_expr(Compiler *C, ASTNode *node){
         }
 
         case NODE_INDEX:{
-            /* stack: [array, index] → OP_ARRAY_INDEX → [element] */
+            
             compile_expr(C, node->index.object_expr);
             compile_expr(C, node->index.index);
             emit_op(C, OP_ARRAY_INDEX, line);
@@ -399,7 +404,7 @@ static void compile_expr(Compiler *C, ASTNode *node){
         }
 
         case NODE_INDEX_SET:{
-            /* arr[idx] = val → stack: [array, index, value] → OP_ARRAY_SET → [value] */
+            
             compile_expr(C, node->index_set.object_expr);
             compile_expr(C, node->index_set.index);
             compile_expr(C, node->index_set.value);
@@ -412,7 +417,7 @@ static void compile_expr(Compiler *C, ASTNode *node){
     }
 }
 
-/* ─── Compile statement ──────────────────────────────────────────────────── */
+
 static void compile_stmt(Compiler *C, ASTNode *node){
     if(!node||C->had_error) return;
     int line=node->line;
@@ -471,65 +476,41 @@ static void compile_stmt(Compiler *C, ASTNode *node){
             break;
         }
 
-        /* ─────────────────────────────────────────────────────────────────────
-         *  IF / ELSE  (fixed double-POP bug)
-         *
-         *  Pattern:
-         *    compile(cond)
-         *    JUMP_IF_FALSE → false_label   ; cond stays on stack
-         *    POP                            ; pop cond on TRUE path
-         *    compile(then)
-         *    JUMP → end_label              ; skip false cleanup
-         *    false_label:
-         *    POP                            ; pop cond on FALSE path
-         *    [compile(else)]
-         *    end_label:
-         * ──────────────────────────────────────────────────────────────────── */
+        
         case NODE_IF:{
             compile_expr(C,node->if_stmt.condition);
             int jf=emit_jump(C,OP_JUMP_IF_FALSE,line);
-            emit_op(C,OP_POP,line);                          /* true path: pop cond */
+            emit_op(C,OP_POP,line);                          
             {
                 int saved_lc = C->in_function ? C->local_count : -1;
                 compile_stmt(C,node->if_stmt.then_branch);
                 if(saved_lc >= 0) pop_scope(C, saved_lc, line);
             }
-            int je=emit_jump(C,OP_JUMP,line);               /* skip else           */
-            patch_jump(C,jf);                                /* false path lands here */
-            emit_op(C,OP_POP,line);                          /* false path: pop cond */
+            int je=emit_jump(C,OP_JUMP,line);               
+            patch_jump(C,jf);                                
+            emit_op(C,OP_POP,line);                          
             if(node->if_stmt.else_branch){
                 int saved_lc = C->in_function ? C->local_count : -1;
                 compile_stmt(C,node->if_stmt.else_branch);
                 if(saved_lc >= 0) pop_scope(C, saved_lc, line);
             }
-            patch_jump(C,je);                                /* end label */
+            patch_jump(C,je);                                
             break;
         }
 
-        /* ─────────────────────────────────────────────────────────────────────
-         *  WHILE  with break/continue
-         *
-         *  loop_start:
-         *    compile(cond)
-         *    JUMP_IF_FALSE → exit_label
-         *    POP
-         *    compile(body)        ← break → patch to exit; continue → patch to loop_start
-         *    JUMP → loop_start
-         *  exit_label:
-         *    POP
-         * ──────────────────────────────────────────────────────────────────── */
+        
         case NODE_WHILE:{
             push_ctx(C,CTX_LOOP);
             int loop_start=current_offset(C);
             compile_expr(C,node->while_stmt.condition);
             int jo=emit_jump(C,OP_JUMP_IF_FALSE,line);
             emit_op(C,OP_POP,line);
-            {   /* scope for body locals */
+            {   
                 int saved_lc = C->local_count;
                 compile_stmt(C,node->while_stmt.body);
                 pop_scope(C, saved_lc, line);
             }
-            /* patch continues to loop_start */
+            
             patch_continues(C,loop_start);
             emit_loop(C,loop_start,line);
             patch_jump(C,jo);
@@ -538,22 +519,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
             break;
         }
 
-        /* ─────────────────────────────────────────────────────────────────────
-         *  FOR  with break/continue
-         *
-         *    compile(init)
-         *  loop_start:
-         *    compile(cond)  [optional]
-         *    JUMP_IF_FALSE → exit [if cond]
-         *    POP [if cond]
-         *    compile(body)   ← break→exit; continue→post_start
-         *  post_start:
-         *    compile(post)  [optional]
-         *    POP
-         *    JUMP → loop_start
-         *  exit:
-         *    POP [if cond]
-         * ──────────────────────────────────────────────────────────────────── */
+        
         case NODE_FOR:{
             push_ctx(C,CTX_LOOP);
             if(node->for_stmt.init) compile_stmt(C,node->for_stmt.init);
@@ -564,12 +530,12 @@ static void compile_stmt(Compiler *C, ASTNode *node){
                 jo=emit_jump(C,OP_JUMP_IF_FALSE,line);
                 emit_op(C,OP_POP,line);
             }
-            {   /* scope for body locals */
+            {   
                 int saved_lc = C->local_count;
                 compile_stmt(C,node->for_stmt.body);
                 pop_scope(C, saved_lc, line);
             }
-            /* continues jump here (post-expression) */
+            
             int post_start=current_offset(C);
             patch_continues(C,post_start);
             if(node->for_stmt.post){
@@ -582,45 +548,9 @@ static void compile_stmt(Compiler *C, ASTNode *node){
             break;
         }
 
-        /* ─────────────────────────────────────────────────────────────────────
-         *  SWITCH  (no fallthrough — each case implicitly breaks)
-         *
-         *  For each case:
-         *    DUP subject
-         *    push case_value
-         *    EQ
-         *    JUMP_IF_FALSE → next_check   ; cond stays on stack
-         *    POP                           ; pop EQ result (true)
-         *    POP                           ; pop DUP'd subject
-         *    compile(body)
-         *    JUMP → switch_end            ; implicit break (+ explicit break)
-         *
-         *  next_check:
-         *    POP                           ; pop EQ result (false)
-         *  ...
-         *  default_label:
-         *    POP                           ; pop last EQ result (or just nothing for default)
-         *    compile(default_body)
-         *  switch_end:
-         *    POP                           ; pop original subject
-         * ──────────────────────────────────────────────────────────────────── */
+        
         case NODE_SWITCH:{
-            /*  Stack before each case: [..., subject]
-             *    DUP         → [..., subject, subject]
-             *    push val    → [..., subject, subject, val]
-             *    EQ          → [..., subject, bool]
-             *    JIF_FALSE → skip (bool stays! CHN JIF peeks, not pops)
-             *    POP         → [..., subject]   (true path: discard bool)
-             *    POP         → [...]            (pop DUP'd subject copy)
-             *    <body> + emit_break → JUMP → switch_end
-             *  skip:        stack = [..., subject, false]
-             *    POP         → [..., subject]   (false path: discard bool)
-             *  [next case repeats...]
-             *  [default body — subject still on stack, just run stmts]
-             *  switch_end:
-             *    POP         → pop subject
-             *    (break jumps patch here)
-             */
+            
             push_ctx(C, CTX_SWITCH);
             compile_expr(C, node->switch_stmt.subject);
 
@@ -631,18 +561,18 @@ static void compile_stmt(Compiler *C, ASTNode *node){
                 compile_expr(C, sc->value);
                 emit_op(C, OP_EQ, line);
                 int skip = emit_jump(C, OP_JUMP_IF_FALSE, line);
-                emit_op(C, OP_POP, line);  /* pop bool — true path  */
-                emit_op(C, OP_POP, line);  /* pop DUP subject copy  */
+                emit_op(C, OP_POP, line);  
+                emit_op(C, OP_POP, line);  
                 compile_stmt(C, sc->body);
-                emit_break(C, line);       /* implicit break        */
-                patch_jump(C, skip);       /* false path lands here */
-                emit_op(C, OP_POP, line);  /* pop bool — false path */
+                emit_break(C, line);       
+                patch_jump(C, skip);       
+                emit_op(C, OP_POP, line);  
             }
 
             if (node->switch_stmt.default_body)
                 compile_stmt(C, node->switch_stmt.default_body);
 
-            emit_op(C, OP_POP, line);      /* pop subject           */
+            emit_op(C, OP_POP, line);      
             pop_ctx_patch_breaks(C);
             break;
         }
@@ -671,7 +601,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
         }
 
         case NODE_FUNC_DECL:{
-            /* Find or create the FunctionObject — may already exist from prescan */
+            
             FunctionObject *f = NULL;
             for(int i=0;i<C->func_count;i++){
                 if(!strcmp(C->functions[i]->name,node->func_decl.name)){
@@ -684,7 +614,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
                 for(int i=0;i<f->arity;i++) strncpy(f->params[i],node->func_decl.params[i],MAX_IDENT_LEN-1);
                 if(C->func_count<MAX_FUNCS) C->functions[C->func_count++]=f;
             } else {
-                /* Update fields that prescan may not have set */
+                
                 f->visibility = node->func_decl.visibility;
                 strncpy(f->source_file, C->source_file, sizeof(f->source_file)-1);
             }
@@ -693,7 +623,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
                 C->current_func->nested[C->current_func->nested_count++]=f;
             func_register(f);
 
-            /* save state */
+            
             Chunk          *saved_chunk=C->current_chunk;
             Local           saved_locs[MAX_LOCALS]; memcpy(saved_locs,C->locals,sizeof(C->locals));
             int             saved_lc=C->local_count;
@@ -705,7 +635,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
             C->current_chunk=&f->chunk; C->local_count=0;
             C->in_function=true; C->current_func=f; C->ctx_depth=0;
 
-            emit_op(C, OP_GC_SAFEPOINT, line);  /* GC yield at function entry */
+            emit_op(C, OP_GC_SAFEPOINT, line);  
 
             for(int i=0;i<f->arity;i++){
                 int slot=local_define(C,f->params[i],false,line);
@@ -714,7 +644,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
             compile_stmt(C,node->func_decl.body);
             emit_op(C,OP_NIL,line); emit_op(C,OP_RETURN,line);
 
-            /* restore */
+            
             C->current_chunk=saved_chunk; C->local_count=saved_lc;
             C->in_function=saved_if; C->current_func=saved_cf; C->ctx_depth=saved_cd;
             memcpy(C->locals,saved_locs,sizeof(C->locals));
@@ -734,8 +664,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
         }
 
         case NODE_EXPORT:{
-            /* If this is 'export func/public/private ...' with an inline def,
-               compile the function first, then mark it exported. */
+            
             if (node->export_node.func_def) {
                 compile_stmt(C, node->export_node.func_def);
                 if (C->had_error) break;
@@ -762,7 +691,7 @@ static void compile_stmt(Compiler *C, ASTNode *node){
         }
 
         case NODE_NATIVE_CALL:{
-            /* emit args, then OP_NATIVE u16:id u8:argc */
+            
             for(int i=0;i<node->native_call.argc;i++)
                 compile_expr(C,node->native_call.args[i]);
             emit_op(C,OP_NATIVE,line);
@@ -777,19 +706,19 @@ static void compile_stmt(Compiler *C, ASTNode *node){
     }
 }
 
-/* ─── Public API ─────────────────────────────────────────────────────────── */
+
 void compiler_init(Compiler *C, const char *source_file){
     memset(C,0,sizeof(Compiler));
     C->current_chunk=&C->top_chunk;
     strncpy(C->source_file,source_file?source_file:"<unknown>",1023);
 }
 
-/* ── Pre-scan: register all function declarations without compiling bodies ─── */
+
 static void prescan_stmt(Compiler *C, ASTNode *node){
     if (!node) return;
     switch(node->kind){
         case NODE_FUNC_DECL:{
-            /* Register name only — body compiled in the real pass */
+            
             const char *fname = node->func_decl.name;
             bool already = false;
             for(int i=0;i<C->func_count;i++) if(!strcmp(C->functions[i]->name,fname)){already=true;break;}
@@ -815,7 +744,7 @@ static void prescan_stmt(Compiler *C, ASTNode *node){
 
 bool compiler_compile(Compiler *C, ASTNode *ast){
     if(!ast) return false;
-    /* Pre-scan: register all top-level function names so forward calls resolve */
+    
     prescan_stmt(C, ast);
     if(ast->kind==NODE_PROGRAM)
         for(int i=0;i<ast->program.count&&!C->had_error;i++) compile_stmt(C,ast->program.stmts[i]);
@@ -825,7 +754,7 @@ bool compiler_compile(Compiler *C, ASTNode *ast){
     return !C->had_error;
 }
 
-/* ─── Disassembler ───────────────────────────────────────────────────────── */
+
 static void print_val(Value v){
     switch(v.type){
         case VAL_NUMBER:
